@@ -1,0 +1,191 @@
+@model List<TradingJournal.Web.Models.DividendDto>
+@{
+    ViewData["Title"] = "Dividends";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var summary = ViewBag.Summary as TradingJournal.Web.Models.DividendSummaryDto;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1><i class="bi bi-cash-coin"></i> Dividends</h1>
+    <div>
+        <a asp-action="BySymbol" asp-route-accountId="@ViewBag.SelectedAccountId" class="btn btn-outline-info">
+            <i class="bi bi-pie-chart"></i> By Symbol
+        </a>
+        <a asp-action="Create" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Add Dividend
+        </a>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle"></i> @TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> @TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (ViewBag.Accounts != null)
+{
+    <div class="mb-3">
+        <form method="get" class="d-inline">
+            <select name="accountId" class="form-select d-inline-block" style="width: auto;" onchange="this.form.submit()">
+                <option value="">All Accounts</option>
+                @foreach (var account in (List<TradingJournal.Web.Models.AccountDto>)ViewBag.Accounts)
+                {
+                    <option value="@account.Id" selected="@(ViewBag.SelectedAccountId == account.Id)">@account.Name</option>
+                }
+            </select>
+        </form>
+    </div>
+}
+
+@if (summary != null)
+{
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card text-center bg-success text-white">
+                <div class="card-body py-2">
+                    <h6 class="card-title mb-0">Total Dividends</h6>
+                    <h4 class="mb-0">@summary.TotalDividends.ToString("C2")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <h6 class="card-title text-muted mb-0">YTD</h6>
+                    <h4 class="text-success mb-0">@summary.YtdDividends.ToString("C2")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <h6 class="card-title text-muted mb-0">Last Month</h6>
+                    <h4 class="mb-0">@summary.LastMonthDividends.ToString("C2")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <h6 class="card-title text-muted mb-0">Tax Withheld</h6>
+                    <h4 class="text-danger mb-0">@summary.TotalTaxWithheld.ToString("C2")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <h6 class="card-title text-muted mb-0">Payments</h6>
+                    <h4 class="mb-0">@summary.TotalPayments</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body py-2">
+                    <h6 class="card-title text-muted mb-0">Symbols</h6>
+                    <h4 class="mb-0">@summary.UniqueSymbols</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.Any())
+{
+    <div class="card">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Dividend History (@Model.Count payments)</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Date</th>
+                            <th>Symbol</th>
+                            <th>Type</th>
+                            <th class="text-end">Amount</th>
+                            <th class="text-end">Tax</th>
+                            <th class="text-end">Net</th>
+                            <th>Account</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var dividend in Model)
+                        {
+                            <tr>
+                                <td>@dividend.PaymentDate.ToString("MMM dd, yyyy")</td>
+                                <td><strong>@dividend.Symbol</strong></td>
+                                <td>
+                                    @switch (dividend.Type)
+                                    {
+                                        case "CASH":
+                                            <span class="badge bg-success">Cash</span>
+                                            break;
+                                        case "REINVESTED":
+                                            <span class="badge bg-primary">Reinvested</span>
+                                            break;
+                                        case "QUALIFIED":
+                                            <span class="badge bg-info">Qualified</span>
+                                            break;
+                                        case "NON_QUALIFIED":
+                                            <span class="badge bg-warning text-dark">Non-Qualified</span>
+                                            break;
+                                        default:
+                                            <span class="badge bg-secondary">@dividend.Type</span>
+                                            break;
+                                    }
+                                </td>
+                                <td class="text-end text-success">+@dividend.Amount.ToString("C2")</td>
+                                <td class="text-end text-danger">
+                                    @if (dividend.TaxWithheld > 0)
+                                    {
+                                        @($"-{dividend.TaxWithheld:C2}")
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td class="text-end"><strong>@((dividend.Amount - dividend.TaxWithheld).ToString("C2"))</strong></td>
+                                <td><small>@dividend.Account?.Name</small></td>
+                                <td>
+                                    <a asp-action="Edit" asp-route-id="@dividend.Id" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form asp-action="Delete" asp-route-id="@dividend.Id" method="post" class="d-inline"
+                                          onsubmit="return confirm('Delete this dividend?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No dividends recorded yet. 
+        <a asp-action="Create">Add your first dividend</a> or 
+        <a asp-controller="Import" asp-action="Index">import from your broker</a>.
+    </div>
+}

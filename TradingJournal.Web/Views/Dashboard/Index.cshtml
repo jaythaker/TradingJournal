@@ -1,0 +1,381 @@
+@model TradingJournal.Web.Models.DashboardMetricsDto
+@{
+    ViewData["Title"] = "Dashboard";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var accounts = ViewBag.Accounts as List<TradingJournal.Web.Models.AccountDto> ?? new List<TradingJournal.Web.Models.AccountDto>();
+    var selectedAccountId = ViewBag.SelectedAccountId as string;
+    var startDate = ViewBag.StartDate as DateTime?;
+    var endDate = ViewBag.EndDate as DateTime?;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="accountId" class="form-label">Account</label>
+                <select name="accountId" id="accountId" class="form-select">
+                    <option value="">All Accounts</option>
+                    @foreach (var account in accounts)
+                    {
+                        <option value="@account.Id" selected="@(account.Id == selectedAccountId)">@account.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="startDate" class="form-label">Start Date</label>
+                <input type="date" name="startDate" id="startDate" class="form-control" 
+                       value="@(startDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-3">
+                <label for="endDate" class="form-label">End Date</label>
+                <input type="date" name="endDate" id="endDate" class="form-control" 
+                       value="@(endDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="bi bi-filter"></i> Apply Filters
+                </button>
+                <a href="@Url.Action("Index")" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i> Clear
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@if (ViewBag.Error != null)
+{
+    <div class="alert alert-warning">@ViewBag.Error</div>
+}
+
+<!-- Summary Cards Row 1 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card h-100 border-primary">
+            <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">Total Realized P&L</h6>
+                <h2 class="@(Model.TotalRealizedPnL >= 0 ? "text-success" : "text-danger")">
+                    @(Model.TotalRealizedPnL >= 0 ? "+" : "")$@Model.TotalRealizedPnL.ToString("N2")
+                </h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-info">
+            <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">Win Rate</h6>
+                <h2 class="@(Model.WinRate >= 50 ? "text-success" : "text-warning")">
+                    @Model.WinRate.ToString("N1")%
+                </h2>
+                <small class="text-muted">@Model.WinningTrades W / @Model.LosingTrades L</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-success">
+            <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">Avg. Wins/Day</h6>
+                <h2 class="text-primary">@Model.AvgWinsPerDay.ToString("N2")</h2>
+                <small class="text-muted">@Model.TradingDays trading days</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-warning">
+            <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">Total Dividends</h6>
+                <h2 class="text-success">$@Model.TotalDividends.ToString("N2")</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards Row 2 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">Portfolio Value</h6>
+                <h3 class="text-primary">$@Model.PortfolioValue.ToString("N2")</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">Cost Basis</h6>
+                <h3 class="text-secondary">$@Model.PortfolioCost.ToString("N2")</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">Unrealized P&L</h6>
+                <h3 class="@(Model.UnrealizedPnL >= 0 ? "text-success" : "text-danger")">
+                    @(Model.UnrealizedPnL >= 0 ? "+" : "")$@Model.UnrealizedPnL.ToString("N2")
+                </h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">Total Trades</h6>
+                <h3 class="text-info">@Model.TotalTrades</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 1 -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Aggregate P&L vs Date</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="pnlChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Equity Curve</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="equityChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 2 -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cash-coin"></i> Dividends vs Date</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="dividendChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Win/Loss Distribution</h5>
+            </div>
+            <div class="card-body d-flex justify-content-center align-items-center">
+                <canvas id="winLossChart" height="200" style="max-width: 300px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Data from model
+        const cumulativePnLData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CumulativePnL));
+        const equityCurveData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.EquityCurve));
+        const cumulativeDividendsData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CumulativeDividends));
+        const dailyDividendsData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DailyDividends));
+        const winningTrades = @Model.WinningTrades;
+        const losingTrades = @Model.LosingTrades;
+
+        // Helper to format dates - handle ISO dates without timezone
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            // Parse the date string manually to avoid timezone issues
+            const parts = dateStr.split('T')[0].split('-');
+            if (parts.length !== 3) return dateStr;
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = months[parseInt(parts[1], 10) - 1];
+            const day = parseInt(parts[2], 10);
+            return `${month} ${day}`;
+        }
+
+        // P&L Chart (Cumulative)
+        if (cumulativePnLData.length > 0) {
+            const pnlCtx = document.getElementById('pnlChart').getContext('2d');
+            new Chart(pnlCtx, {
+                type: 'line',
+                data: {
+                    labels: cumulativePnLData.map(d => formatDate(d.date)),
+                    datasets: [{
+                        label: 'Cumulative P&L',
+                        data: cumulativePnLData.map(d => d.value),
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `$${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: value => '$' + value.toLocaleString()
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Equity Curve Chart
+        if (equityCurveData.length > 0) {
+            const equityCtx = document.getElementById('equityChart').getContext('2d');
+            new Chart(equityCtx, {
+                type: 'line',
+                data: {
+                    labels: equityCurveData.map(d => formatDate(d.date)),
+                    datasets: [{
+                        label: 'Equity',
+                        data: equityCurveData.map(d => d.value),
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `$${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: value => '$' + value.toLocaleString()
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Dividends Chart (Combined bar + line)
+        if (cumulativeDividendsData.length > 0) {
+            const dividendCtx = document.getElementById('dividendChart').getContext('2d');
+            new Chart(dividendCtx, {
+                type: 'bar',
+                data: {
+                    labels: cumulativeDividendsData.map(d => formatDate(d.date)),
+                    datasets: [
+                        {
+                            label: 'Daily Dividend',
+                            type: 'bar',
+                            data: dailyDividendsData.map(d => d.value),
+                            backgroundColor: 'rgba(255, 193, 7, 0.6)',
+                            borderColor: 'rgb(255, 193, 7)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Cumulative Dividends',
+                            type: 'line',
+                            data: cumulativeDividendsData.map(d => d.value),
+                            borderColor: 'rgb(40, 167, 69)',
+                            backgroundColor: 'transparent',
+                            tension: 0.1,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `${ctx.dataset.label}: $${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: 'Daily ($)' },
+                            ticks: { callback: v => '$' + v }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Cumulative ($)' },
+                            ticks: { callback: v => '$' + v },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Win/Loss Pie Chart
+        if (winningTrades > 0 || losingTrades > 0) {
+            const winLossCtx = document.getElementById('winLossChart').getContext('2d');
+            new Chart(winLossCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Winning Trades', 'Losing Trades'],
+                    datasets: [{
+                        data: [winningTrades, losingTrades],
+                        backgroundColor: [
+                            'rgba(40, 167, 69, 0.8)',
+                            'rgba(220, 53, 69, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgb(40, 167, 69)',
+                            'rgb(220, 53, 69)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => {
+                                    const total = winningTrades + losingTrades;
+                                    const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                    return `${ctx.label}: ${ctx.raw} (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+}

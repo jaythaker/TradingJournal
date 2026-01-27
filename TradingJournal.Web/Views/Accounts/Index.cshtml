@@ -1,0 +1,75 @@
+@model List<TradingJournal.Web.Models.AccountDto>
+@{
+    ViewData["Title"] = "Accounts";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1><i class="bi bi-wallet2"></i> Accounts</h1>
+    <a asp-action="Create" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> New Account
+    </a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle"></i> @TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> @TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row">
+    @foreach (var account in Model)
+    {
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-bank"></i> @account.Name
+                    </h5>
+                    <p class="card-text text-muted">Currency: @account.Currency</p>
+                    <div class="d-flex flex-wrap gap-1">
+                        <a asp-action="Edit" asp-route-id="@account.Id" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-pencil"></i> Edit
+                        </a>
+                        <a asp-controller="Trades" asp-action="Summary" asp-route-accountId="@account.Id" class="btn btn-sm btn-outline-info">
+                            <i class="bi bi-list-ul"></i> Trades
+                        </a>
+                        <a asp-controller="Import" asp-action="Index" class="btn btn-sm btn-outline-success">
+                            <i class="bi bi-upload"></i> Import
+                        </a>
+                        <form asp-action="ClearTrades" asp-route-id="@account.Id" method="post" class="d-inline" 
+                              onsubmit="return confirm('WARNING: This will permanently delete ALL trades for this account.\n\nAccount: @account.Name\n\nThis action cannot be undone. Are you sure?');">
+                            <button type="submit" class="btn btn-sm btn-outline-warning">
+                                <i class="bi bi-eraser"></i> Clear Trades
+                            </button>
+                        </form>
+                        <form asp-action="Delete" asp-route-id="@account.Id" method="post" class="d-inline" 
+                              onsubmit="return confirm('Are you sure you want to delete this account and all its trades?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i> Delete
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No accounts found. 
+        <a asp-action="Create">Create your first account</a> to start tracking your trades.
+    </div>
+}

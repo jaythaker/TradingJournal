@@ -1,0 +1,32 @@
+@model TradingJournal.Web.Models.CreateAccountDto
+@{
+    ViewData["Title"] = "New Account";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<h1>New Account</h1>
+
+@if (ViewBag.Error != null)
+{
+    <div class="alert alert-danger">@ViewBag.Error</div>
+}
+
+<form asp-action="Create" method="post">
+    <div class="mb-3">
+        <label asp-for="Name" class="form-label">Name</label>
+        <input asp-for="Name" class="form-control" required>
+    </div>
+    <div class="mb-3">
+        <label asp-for="Currency" class="form-label">Currency</label>
+        <select asp-for="Currency" class="form-select">
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="JPY">JPY</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <button type="submit" class="btn btn-primary">Create Account</button>
+        <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>

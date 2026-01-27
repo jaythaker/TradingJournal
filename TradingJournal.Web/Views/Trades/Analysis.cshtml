@@ -1,0 +1,240 @@
+@model TradingJournal.Web.Controllers.TimeAnalysisSummaryDto
+@{
+    ViewData["Title"] = "Trade Analysis";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var accounts = ViewBag.Accounts as List<TradingJournal.Web.Models.AccountDto> ?? new List<TradingJournal.Web.Models.AccountDto>();
+    var selectedAccountId = ViewBag.SelectedAccountId as string;
+    var currentView = ViewBag.View as string ?? "monthly";
+    var startDate = ViewBag.StartDate as DateTime?;
+    var endDate = ViewBag.EndDate as DateTime?;
+    
+    var periods = currentView == "weekly" ? Model?.Weekly : Model?.Monthly;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-calendar-check"></i> Trade Analysis</h1>
+    <div>
+        <a asp-action="Summary" class="btn btn-outline-secondary">
+            <i class="bi bi-graph-up"></i> By Symbol
+        </a>
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-list"></i> All Trades
+        </a>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Total Trades</h6>
+                <h3>@Model?.TotalTrades</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card @(Model?.TotalRealizedPnL >= 0 ? "bg-success text-white" : "bg-danger text-white")">
+            <div class="card-body text-center">
+                <h6>Total Realized P&L</h6>
+                <h3>@Model?.TotalRealizedPnL.ToString("C2")</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h6>Overall Win Rate</h6>
+                <h3>@Model?.OverallWinRate.ToString("N1")%</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Periods Analyzed</h6>
+                <h3>@periods?.Count</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Account</label>
+                <select name="accountId" class="form-select">
+                    <option value="">All Accounts</option>
+                    @foreach (var account in accounts)
+                    {
+                        <option value="@account.Id" selected="@(selectedAccountId == account.Id)">@account.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Start Date</label>
+                <input type="date" name="startDate" class="form-control" value="@(startDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">End Date</label>
+                <input type="date" name="endDate" class="form-control" value="@(endDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">View</label>
+                <select name="view" class="form-select">
+                    <option value="monthly" selected="@(currentView == "monthly")">Monthly</option>
+                    <option value="weekly" selected="@(currentView == "weekly")">Weekly</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary me-2"><i class="bi bi-filter"></i> Apply</button>
+                <a href="@Url.Action("Analysis")" class="btn btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Period Table -->
+@if (periods != null && periods.Any())
+{
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="bi bi-table"></i> @(currentView == "weekly" ? "Weekly" : "Monthly") Performance</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Period</th>
+                            <th class="text-center">Trades</th>
+                            <th class="text-center">Buys</th>
+                            <th class="text-center">Sells</th>
+                            <th class="text-end">Buy Amount</th>
+                            <th class="text-end">Sell Amount</th>
+                            <th class="text-end">Realized P&L</th>
+                            <th class="text-center">Win Rate</th>
+                            <th>Top Performers</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var period in periods)
+                        {
+                            var pnlClass = period.RealizedPnL >= 0 ? "text-success" : "text-danger";
+                            var pnlIcon = period.RealizedPnL >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                            var winRateClass = period.WinRate >= 50 ? "text-success" : "text-warning";
+                            
+                            <tr>
+                                <td>
+                                    <strong>@period.Period</strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        @period.StartDate.ToString("MMM d") - @period.EndDate.ToString("MMM d, yyyy")
+                                    </small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">@period.TotalTrades</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-success">@period.BuyCount</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-danger">@period.SellCount</span>
+                                </td>
+                                <td class="text-end text-danger">
+                                    -@period.TotalBuyAmount.ToString("C2")
+                                </td>
+                                <td class="text-end text-success">
+                                    +@period.TotalSellAmount.ToString("C2")
+                                </td>
+                                <td class="text-end">
+                                    <span class="@pnlClass fw-bold">
+                                        <i class="bi @pnlIcon"></i>
+                                        @period.RealizedPnL.ToString("C2")
+                                    </span>
+                                    <br>
+                                    <small class="@pnlClass">(@period.RealizedPnLPercent.ToString("N1")%)</small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="@winRateClass fw-bold">@period.WinRate.ToString("N0")%</span>
+                                    <br>
+                                    <small class="text-muted">
+                                        @period.WinningTrades W / @period.LosingTrades L
+                                    </small>
+                                </td>
+                                <td>
+                                    @if (period.SymbolBreakdown.Any())
+                                    {
+                                        @foreach (var sym in period.SymbolBreakdown.Take(3))
+                                        {
+                                            var symClass = sym.RealizedPnL >= 0 ? "bg-success" : "bg-danger";
+                                            <span class="badge @symClass me-1" title="@sym.RealizedPnL.ToString("C2")">
+                                                @sym.Symbol
+                                            </span>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr class="fw-bold">
+                            <td>Total</td>
+                            <td class="text-center">@periods.Sum(p => p.TotalTrades)</td>
+                            <td class="text-center">@periods.Sum(p => p.BuyCount)</td>
+                            <td class="text-center">@periods.Sum(p => p.SellCount)</td>
+                            <td class="text-end text-danger">-@periods.Sum(p => p.TotalBuyAmount).ToString("C2")</td>
+                            <td class="text-end text-success">+@periods.Sum(p => p.TotalSellAmount).ToString("C2")</td>
+                            <td class="text-end @(Model?.TotalRealizedPnL >= 0 ? "text-success" : "text-danger")">
+                                @Model?.TotalRealizedPnL.ToString("C2")
+                            </td>
+                            <td class="text-center">@Model?.OverallWinRate.ToString("N0")%</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart placeholder -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5><i class="bi bi-bar-chart"></i> P&L Trend</h5>
+        </div>
+        <div class="card-body">
+            <div class="d-flex align-items-end" style="height: 200px; gap: 2px;">
+                @{
+                    var maxPnL = periods.Max(p => Math.Abs(p.RealizedPnL));
+                    if (maxPnL == 0) maxPnL = 1;
+                }
+                @foreach (var period in periods.OrderBy(p => p.Period))
+                {
+                    var height = Math.Abs(period.RealizedPnL) / maxPnL * 150;
+                    var barClass = period.RealizedPnL >= 0 ? "bg-success" : "bg-danger";
+                    var marginBottom = period.RealizedPnL >= 0 ? "0" : "0";
+                    
+                    <div class="d-flex flex-column align-items-center flex-grow-1" style="min-width: 30px;">
+                        <div class="@barClass rounded-top" 
+                             style="width: 80%; height: @(height)px;" 
+                             title="@period.Period: @period.RealizedPnL.ToString("C2")">
+                        </div>
+                        <small class="text-muted mt-1" style="font-size: 0.6rem; writing-mode: vertical-rl; transform: rotate(180deg);">
+                            @(currentView == "weekly" ? period.Period.Replace($"{period.StartDate.Year}-", "") : period.Period.Substring(5))
+                        </small>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No trades found for analysis. 
+        <a asp-action="Create">Create your first trade</a> or 
+        <a asp-controller="Import" asp-action="Index">import trades from a CSV file</a>.
+    </div>
+}

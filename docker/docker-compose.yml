@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: trading-journal-db
+    environment:
+      POSTGRES_USER: tradingjournal
+      POSTGRES_PASSWORD: tradingjournal
+      POSTGRES_DB: tradingjournal
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradingjournal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: TradingJournal.Api/Dockerfile
+    container_name: trading-journal-api
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgres;Database=tradingjournal;Username=tradingjournal;Password=tradingjournal"
+      JWT_SECRET: "your-super-secret-jwt-key-change-this-in-production"
+      FRONTEND_URL: "http://localhost:5000"
+      ASPNETCORE_URLS: "http://+:80"
+    ports:
+      - "3333:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: TradingJournal.Web/Dockerfile
+    container_name: trading-journal-web
+    environment:
+      ApiBaseUrl: "http://api/api/"
+      ASPNETCORE_URLS: "http://+:80"
+    ports:
+      - "5000:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

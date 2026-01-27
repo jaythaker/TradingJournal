@@ -1,0 +1,116 @@
+@model List<TradingJournal.Web.Models.DividendBySymbolDto>
+@{
+    ViewData["Title"] = "Dividends by Symbol";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var totalDividends = (double)(ViewBag.TotalDividends ?? 0);
+    var totalSymbols = (int)(ViewBag.TotalSymbols ?? 0);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1><i class="bi bi-pie-chart"></i> Dividends by Symbol</h1>
+    <div>
+        <a asp-action="Index" asp-route-accountId="@ViewBag.SelectedAccountId" class="btn btn-outline-primary">
+            <i class="bi bi-list-ul"></i> All Dividends
+        </a>
+        <a asp-action="Create" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Add Dividend
+        </a>
+    </div>
+</div>
+
+@if (ViewBag.Accounts != null)
+{
+    <div class="mb-3">
+        <form method="get" class="d-inline">
+            <select name="accountId" class="form-select d-inline-block" style="width: auto;" onchange="this.form.submit()">
+                <option value="">All Accounts</option>
+                @foreach (var account in (List<TradingJournal.Web.Models.AccountDto>)ViewBag.Accounts)
+                {
+                    <option value="@account.Id" selected="@(ViewBag.SelectedAccountId == account.Id)">@account.Name</option>
+                }
+            </select>
+        </form>
+    </div>
+}
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-center bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title">Total Dividends</h5>
+                <h2>@totalDividends.ToString("C2")</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Dividend-Paying Stocks</h5>
+                <h2>@totalSymbols</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Avg per Stock</h5>
+                <h2 class="text-success">@(totalSymbols > 0 ? (totalDividends / totalSymbols).ToString("C2") : "$0.00")</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.Any())
+{
+    <div class="row">
+        @foreach (var symbol in Model)
+        {
+            var percentage = totalDividends > 0 ? (symbol.TotalAmount / totalDividends) * 100 : 0;
+            <div class="col-md-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong class="fs-5">@symbol.Symbol</strong>
+                        <span class="badge bg-success fs-6">@symbol.TotalAmount.ToString("C2")</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="progress mb-3" style="height: 8px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: @percentage%"></div>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <small class="text-muted">Payments</small>
+                                <div class="fw-bold">@symbol.PaymentCount</div>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Net Amount</small>
+                                <div class="fw-bold text-success">@symbol.NetAmount.ToString("C2")</div>
+                            </div>
+                        </div>
+                        @if (symbol.TotalTaxWithheld > 0)
+                        {
+                            <div class="text-center mt-2">
+                                <small class="text-danger">Tax Withheld: @symbol.TotalTaxWithheld.ToString("C2")</small>
+                            </div>
+                        }
+                        @if (symbol.LastPaymentDate.HasValue)
+                        {
+                            <hr />
+                            <small class="text-muted">
+                                Last: @symbol.LastPaymentDate.Value.ToString("MMM dd, yyyy") 
+                                - @symbol.LastPaymentAmount?.ToString("C2")
+                            </small>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No dividends recorded yet.
+        <a asp-action="Create">Add your first dividend</a> or 
+        <a asp-controller="Import" asp-action="Index">import from your broker</a>.
+    </div>
+}

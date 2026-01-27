@@ -1,0 +1,547 @@
+@model TradingJournal.Web.Models.TradingSummaryDto
+@{
+    ViewData["Title"] = "Trading Summary";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var accounts = ViewBag.Accounts as List<TradingJournal.Web.Models.AccountDto> ?? new List<TradingJournal.Web.Models.AccountDto>();
+    var selectedAccountId = ViewBag.SelectedAccountId as string;
+    var startDate = ViewBag.StartDate as DateTime?;
+    var endDate = ViewBag.EndDate as DateTime?;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-bar-chart-line"></i> Trading Summary</h1>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="accountId" class="form-label">Account</label>
+                <select name="accountId" id="accountId" class="form-select">
+                    <option value="">All Accounts</option>
+                    @foreach (var account in accounts)
+                    {
+                        <option value="@account.Id" selected="@(account.Id == selectedAccountId)">@account.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="startDate" class="form-label">Start Date</label>
+                <input type="date" name="startDate" id="startDate" class="form-control" value="@(startDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-3">
+                <label for="endDate" class="form-label">End Date</label>
+                <input type="date" name="endDate" id="endDate" class="form-control" value="@(endDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary me-2"><i class="bi bi-filter"></i> Apply</button>
+                <a href="@Url.Action("Index")" class="btn btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@if (ViewBag.Error != null)
+{
+    <div class="alert alert-warning">@ViewBag.Error</div>
+}
+
+<!-- Performance Scores Section -->
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-trophy"></i> Performance Scores</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Profit Factor</small>
+                    <h3 class="@(Model.Scores.ProfitFactor >= 1 ? "text-success" : "text-danger")">
+                        @(double.IsInfinity(Model.Scores.ProfitFactor) ? "∞" : Model.Scores.ProfitFactor.ToString("N2"))
+                    </h3>
+                    <small class="text-muted">Gross Profit / Gross Loss</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Win Rate</small>
+                    <h3 class="@(Model.Scores.WinRate >= 50 ? "text-success" : "text-warning")">@Model.Scores.WinRate.ToString("N1")%</h3>
+                    <small class="text-muted">@Model.TradeStats.WinningTrades W / @Model.TradeStats.LosingTrades L</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Win/Loss Ratio</small>
+                    <h3 class="@(Model.Scores.WinLossRatio >= 1 ? "text-success" : "text-warning")">
+                        @(double.IsInfinity(Model.Scores.WinLossRatio) ? "∞" : Model.Scores.WinLossRatio.ToString("N2"))
+                    </h3>
+                    <small class="text-muted">Avg Win / Avg Loss</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Trading Expectancy</small>
+                    <h3 class="@(Model.Scores.TradingExpectancy >= 0 ? "text-success" : "text-danger")">
+                        $@Model.Scores.TradingExpectancy.ToString("N2")
+                    </h3>
+                    <small class="text-muted">Expected $ per trade</small>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">System Quality (SQN)</small>
+                    <h3 class="@(Model.Scores.SystemQualityNumber >= 2 ? "text-success" : Model.Scores.SystemQualityNumber >= 1.5 ? "text-warning" : "text-danger")">
+                        @Model.Scores.SystemQualityNumber.ToString("N2")
+                    </h3>
+                    <small class="text-muted">@GetSQNRating(Model.Scores.SystemQualityNumber)</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Max Drawdown</small>
+                    <h3 class="text-danger">$@Model.Scores.MaxDrawdown.ToString("N2")</h3>
+                    <small class="text-muted">@Model.Scores.MaxDrawdownPercent.ToString("N1")% from peak</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Kelly Criterion</small>
+                    <h3 class="text-info">@((Model.Scores.KellyCriterion * 100).ToString("N1"))%</h3>
+                    <small class="text-muted">Optimal position size</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Gain-to-Pain Ratio</small>
+                    <h3 class="@(Model.Scores.GainToPainRatio >= 1 ? "text-success" : "text-warning")">
+                        @(double.IsInfinity(Model.Scores.GainToPainRatio) ? "∞" : Model.Scores.GainToPainRatio.ToString("N2"))
+                    </h3>
+                    <small class="text-muted">Net P&L / Total Losses</small>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Max Consecutive Wins</small>
+                    <h3 class="text-success">@Model.Scores.MaxConsecutiveWins</h3>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Max Consecutive Losses</small>
+                    <h3 class="text-danger">@Model.Scores.MaxConsecutiveLosses</h3>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Sharpe Ratio</small>
+                    <h3 class="@(Model.Scores.SharpeRatio >= 1 ? "text-success" : "text-warning")">@Model.Scores.SharpeRatio.ToString("N2")</h3>
+                    <small class="text-muted">Risk-adjusted return</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="border rounded p-3 h-100 text-center">
+                    <small class="text-muted d-block">Adjusted Win/Loss</small>
+                    <h3 class="@(Model.Scores.AdjustedWinLossRatio >= 1 ? "text-success" : "text-warning")">@Model.Scores.AdjustedWinLossRatio.ToString("N2")</h3>
+                    <small class="text-muted">(Avg W × W%) / (Avg L × L%)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- P&L Statistics Section -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-currency-dollar"></i> P&L Statistics</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td>Total P&L</td>
+                            <td class="text-end fw-bold @(Model.PnL.TotalPnL >= 0 ? "text-success" : "text-danger")">
+                                @(Model.PnL.TotalPnL >= 0 ? "+" : "")$@Model.PnL.TotalPnL.ToString("N2")
+                            </td>
+                        </tr>
+                        <tr class="table-success">
+                            <td>Total Profit</td>
+                            <td class="text-end text-success">+$@Model.PnL.TotalProfit.ToString("N2")</td>
+                        </tr>
+                        <tr class="table-danger">
+                            <td>Total Loss</td>
+                            <td class="text-end text-danger">-$@Model.PnL.TotalLoss.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Max Single Profit</td>
+                            <td class="text-end text-success">+$@Model.PnL.MaxProfit.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Max Single Loss</td>
+                            <td class="text-end text-danger">-$@Model.PnL.MaxLoss.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Avg Profit per Win</td>
+                            <td class="text-end">$@Model.PnL.AvgProfit.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Avg Loss per Loss</td>
+                            <td class="text-end">$@Model.PnL.AvgLoss.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Avg P&L per Trade</td>
+                            <td class="text-end @(Model.PnL.AvgPnL >= 0 ? "text-success" : "text-danger")">
+                                $@Model.PnL.AvgPnL.ToString("N2")
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Trade Statistics</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td>Total Trades</td>
+                            <td class="text-end fw-bold">@Model.TradeStats.TotalTrades</td>
+                        </tr>
+                        <tr>
+                            <td>Buy / Sell Trades</td>
+                            <td class="text-end">@Model.TradeStats.BuyTrades / @Model.TradeStats.SellTrades</td>
+                        </tr>
+                        <tr>
+                            <td>Winning / Losing</td>
+                            <td class="text-end">
+                                <span class="text-success">@Model.TradeStats.WinningTrades</span> / 
+                                <span class="text-danger">@Model.TradeStats.LosingTrades</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Break-Even Trades</td>
+                            <td class="text-end">@Model.TradeStats.BreakEvenTrades</td>
+                        </tr>
+                        <tr>
+                            <td>Total Volume</td>
+                            <td class="text-end">$@Model.TradeStats.TotalVolume.ToString("N0")</td>
+                        </tr>
+                        <tr>
+                            <td>Trading Days</td>
+                            <td class="text-end">@Model.TradeStats.TradingDays / @Model.TradeStats.TotalDaysInPeriod days</td>
+                        </tr>
+                        <tr>
+                            <td>Avg Trades/Day</td>
+                            <td class="text-end">@Model.TradeStats.AvgTradesPerDay.ToString("N1")</td>
+                        </tr>
+                        <tr>
+                            <td>Avg Trades/Week</td>
+                            <td class="text-end">@Model.TradeStats.AvgTradesPerWeek.ToString("N1")</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Symbol Statistics Section -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0"><i class="bi bi-trophy-fill"></i> Best & Worst Symbols</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-2">Unique Symbols: <strong>@Model.SymbolStats.UniqueSymbols</strong></p>
+                @if (Model.SymbolStats.BestSymbol != null)
+                {
+                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-success bg-opacity-10 rounded">
+                        <span><i class="bi bi-arrow-up-circle text-success"></i> Best: <strong>@Model.SymbolStats.BestSymbol.Symbol</strong></span>
+                        <span class="text-success fw-bold">+$@Model.SymbolStats.BestSymbol.PnL.ToString("N2")</span>
+                    </div>
+                }
+                @if (Model.SymbolStats.WorstSymbol != null)
+                {
+                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-danger bg-opacity-10 rounded">
+                        <span><i class="bi bi-arrow-down-circle text-danger"></i> Worst: <strong>@Model.SymbolStats.WorstSymbol.Symbol</strong></span>
+                        <span class="text-danger fw-bold">$@Model.SymbolStats.WorstSymbol.PnL.ToString("N2")</span>
+                    </div>
+                }
+                @if (Model.SymbolStats.MostTraded != null)
+                {
+                    <div class="d-flex justify-content-between align-items-center p-2 bg-info bg-opacity-10 rounded">
+                        <span><i class="bi bi-activity text-info"></i> Most Active: <strong>@Model.SymbolStats.MostTraded.Symbol</strong></span>
+                        <span class="text-info">@Model.SymbolStats.MostTraded.TradeCount trades</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Top Profitable</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Symbol</th><th class="text-end">P&L</th><th class="text-end">Win%</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sym in Model.SymbolStats.TopProfitable)
+                        {
+                            <tr>
+                                <td><strong>@sym.Symbol</strong></td>
+                                <td class="text-end text-success">+$@sym.PnL.ToString("N2")</td>
+                                <td class="text-end">@sym.WinRate.ToString("N0")%</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-down-arrow"></i> Top Losing</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Symbol</th><th class="text-end">P&L</th><th class="text-end">Win%</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sym in Model.SymbolStats.TopLosing)
+                        {
+                            <tr>
+                                <td><strong>@sym.Symbol</strong></td>
+                                <td class="text-end text-danger">$@sym.PnL.ToString("N2")</td>
+                                <td class="text-end">@sym.WinRate.ToString("N0")%</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Time & Day of Week Statistics -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Time Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <div class="p-2 bg-success bg-opacity-10 rounded text-center">
+                            <small class="text-muted d-block">Best Trading Day</small>
+                            <strong>@(Model.TimeStats.BestTradingDay ?? "N/A")</strong>
+                            <div class="text-success">+$@Model.TimeStats.BestTradingDayPnL.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 bg-danger bg-opacity-10 rounded text-center">
+                            <small class="text-muted d-block">Worst Trading Day</small>
+                            <strong>@(Model.TimeStats.WorstTradingDay ?? "N/A")</strong>
+                            <div class="text-danger">$@Model.TimeStats.WorstTradingDayPnL.ToString("N2")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <div class="p-2 bg-success bg-opacity-10 rounded text-center">
+                            <small class="text-muted d-block">Best Month</small>
+                            <strong>@(Model.TimeStats.BestMonth ?? "N/A")</strong>
+                            <div class="text-success">+$@Model.TimeStats.BestMonthPnL.ToString("N2")</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 bg-danger bg-opacity-10 rounded text-center">
+                            <small class="text-muted d-block">Worst Month</small>
+                            <strong>@(Model.TimeStats.WorstMonth ?? "N/A")</strong>
+                            <div class="text-danger">$@Model.TimeStats.WorstMonthPnL.ToString("N2")</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-calendar-week"></i> Day of Week Performance</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Day</th><th class="text-end">Trades</th><th class="text-end">P&L</th><th class="text-end">Avg P&L</th><th class="text-end">Win%</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var day in Model.TimeStats.DayOfWeekStats)
+                        {
+                            <tr>
+                                <td>@day.DayName</td>
+                                <td class="text-end">@day.TradeCount</td>
+                                <td class="text-end @(day.TotalPnL >= 0 ? "text-success" : "text-danger")">
+                                    @(day.TotalPnL >= 0 ? "+" : "")$@day.TotalPnL.ToString("N2")
+                                </td>
+                                <td class="text-end @(day.AvgPnL >= 0 ? "text-success" : "text-danger")">
+                                    $@day.AvgPnL.ToString("N2")
+                                </td>
+                                <td class="text-end">@day.WinRate.ToString("N0")%</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly P&L Breakdown -->
+<div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0"><i class="bi bi-calendar3"></i> Monthly P&L Breakdown</h5>
+    </div>
+    <div class="card-body">
+        <canvas id="monthlyPnLChart" height="100"></canvas>
+    </div>
+</div>
+
+<!-- Commission & Dividend Statistics -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-receipt"></i> Commission Statistics</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td>Total Commissions</td>
+                            <td class="text-end fw-bold">$@Model.CommissionStats.TotalCommissions.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Avg Commission/Trade</td>
+                            <td class="text-end">$@Model.CommissionStats.AvgCommissionPerTrade.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Avg Commission/Day</td>
+                            <td class="text-end">$@Model.CommissionStats.AvgCommissionPerDay.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Commission as % of Profit</td>
+                            <td class="text-end">@Model.CommissionStats.CommissionAsPercentOfProfit.ToString("N2")%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cash-coin"></i> Dividend Statistics</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td>Total Dividends</td>
+                            <td class="text-end fw-bold text-success">$@Model.DividendStats.TotalDividends.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Dividend Payments</td>
+                            <td class="text-end">@Model.DividendStats.DividendPayments</td>
+                        </tr>
+                        <tr>
+                            <td>Avg Dividend/Payment</td>
+                            <td class="text-end">$@Model.DividendStats.AvgDividendPerPayment.ToString("N2")</td>
+                        </tr>
+                        <tr>
+                            <td>Dividend Symbols</td>
+                            <td class="text-end">@Model.DividendStats.DividendSymbols</td>
+                        </tr>
+                        @if (!string.IsNullOrEmpty(Model.DividendStats.TopDividendSymbol))
+                        {
+                            <tr>
+                                <td>Top Dividend: @Model.DividendStats.TopDividendSymbol</td>
+                                <td class="text-end text-success">$@Model.DividendStats.TopDividendAmount.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    string GetSQNRating(double sqn)
+    {
+        if (sqn >= 7) return "Holy Grail";
+        if (sqn >= 5) return "Superb";
+        if (sqn >= 3) return "Excellent";
+        if (sqn >= 2) return "Good";
+        if (sqn >= 1.5) return "Average";
+        if (sqn >= 1) return "Below Average";
+        return "Poor";
+    }
+}
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const monthlyData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PnL.MonthlyPnL));
+        
+        if (monthlyData.length > 0) {
+            const ctx = document.getElementById('monthlyPnLChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: monthlyData.map(d => d.period),
+                    datasets: [{
+                        label: 'Monthly P&L',
+                        data: monthlyData.map(d => d.pnL),
+                        backgroundColor: monthlyData.map(d => d.pnL >= 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)'),
+                        borderColor: monthlyData.map(d => d.pnL >= 0 ? 'rgb(40, 167, 69)' : 'rgb(220, 53, 69)'),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `$${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { callback: v => '$' + v.toLocaleString() }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+}

@@ -1,0 +1,252 @@
+@model List<TradingJournal.Web.Controllers.SymbolTradeSummaryDto>
+@{
+    ViewData["Title"] = "Trades by Symbol";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var accounts = ViewBag.Accounts as List<TradingJournal.Web.Models.AccountDto> ?? new List<TradingJournal.Web.Models.AccountDto>();
+    var selectedAccountId = ViewBag.SelectedAccountId as string;
+    var startDate = ViewBag.StartDate as DateTime?;
+    var endDate = ViewBag.EndDate as DateTime?;
+    var status = ViewBag.Status as string;
+    
+    var totalRealizedPnL = Model?.Sum(s => s.RealizedPnL) ?? 0;
+    var totalCurrentValue = Model?.Sum(s => s.CurrentCostBasis) ?? 0;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-graph-up"></i> Trades by Symbol</h1>
+    <div>
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-list"></i> All Trades
+        </a>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Total Symbols</h6>
+                <h3>@Model?.Count</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Current Holdings Value</h6>
+                <h3>@totalCurrentValue.ToString("C2")</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card @(totalRealizedPnL >= 0 ? "bg-success text-white" : "bg-danger text-white")">
+            <div class="card-body text-center">
+                <h6>Realized P&L</h6>
+                <h3>@totalRealizedPnL.ToString("C2")</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h6 class="text-muted">Open Positions</h6>
+                <h3>@Model?.Count(s => s.CurrentQuantity > 0)</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Account</label>
+                <select name="accountId" class="form-select">
+                    <option value="">All Accounts</option>
+                    @foreach (var account in accounts)
+                    {
+                        <option value="@account.Id" selected="@(selectedAccountId == account.Id)">@account.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Start Date</label>
+                <input type="date" name="startDate" class="form-control" value="@(startDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">End Date</label>
+                <input type="date" name="endDate" class="form-control" value="@(endDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Position Status</label>
+                <select name="status" class="form-select">
+                    <option value="" selected="@(string.IsNullOrEmpty(status))">All</option>
+                    <option value="open" selected="@(status == "open")">Open Only</option>
+                    <option value="closed" selected="@(status == "closed")">Closed Only</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary me-2"><i class="bi bi-filter"></i> Apply</button>
+                <a href="@Url.Action("Summary")" class="btn btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Symbol Cards -->
+@if (Model != null && Model.Any())
+{
+    <div class="accordion" id="symbolAccordion">
+        @foreach (var symbol in Model)
+        {
+            var collapseId = $"collapse_{symbol.Symbol.Replace(".", "_")}_{symbol.AccountId.Substring(0, 8)}";
+            var headingId = $"heading_{symbol.Symbol.Replace(".", "_")}_{symbol.AccountId.Substring(0, 8)}";
+            var pnlClass = symbol.RealizedPnL >= 0 ? "text-success" : "text-danger";
+            var pnlIcon = symbol.RealizedPnL >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+            
+            <div class="accordion-item mb-2">
+                <h2 class="accordion-header" id="@headingId">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#@collapseId">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <span class="fw-bold fs-5 me-3">@symbol.Symbol</span>
+                                @if (symbol.CurrentQuantity > 0)
+                                {
+                                    <span class="badge bg-success me-2"><i class="bi bi-unlock"></i> OPEN</span>
+                                    <span class="badge bg-primary me-2">@symbol.CurrentQuantity.ToString("N2") shares</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary me-2"><i class="bi bi-lock"></i> CLOSED</span>
+                                }
+                                <small class="text-muted">@symbol.AccountName</small>
+                            </div>
+                            <div class="d-flex align-items-center me-3">
+                                <span class="@pnlClass fw-bold">
+                                    <i class="bi @pnlIcon"></i>
+                                    @symbol.RealizedPnL.ToString("C2")
+                                    (@symbol.RealizedPnLPercent.ToString("N1")%)
+                                </span>
+                            </div>
+                        </div>
+                    </button>
+                </h2>
+                <div id="@collapseId" class="accordion-collapse collapse" data-bs-parent="#symbolAccordion">
+                    <div class="accordion-body">
+                        <!-- Summary Stats -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <i class="bi bi-cart-plus"></i> Buys
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-4">
+                                                <small class="text-muted">Trades</small>
+                                                <div class="fw-bold">@symbol.BuyCount</div>
+                                            </div>
+                                            <div class="col-4">
+                                                <small class="text-muted">Quantity</small>
+                                                <div class="fw-bold">@symbol.TotalBuyQuantity.ToString("N2")</div>
+                                            </div>
+                                            <div class="col-4">
+                                                <small class="text-muted">Avg Price</small>
+                                                <div class="fw-bold">@symbol.AverageBuyPrice.ToString("C2")</div>
+                                            </div>
+                                        </div>
+                                        <hr>
+                                        <div class="text-end">
+                                            <small class="text-muted">Total Spent:</small>
+                                            <span class="fw-bold text-danger">-@symbol.TotalBuyAmount.ToString("C2")</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <i class="bi bi-cart-dash"></i> Sells
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-4">
+                                                <small class="text-muted">Trades</small>
+                                                <div class="fw-bold">@symbol.SellCount</div>
+                                            </div>
+                                            <div class="col-4">
+                                                <small class="text-muted">Quantity</small>
+                                                <div class="fw-bold">@symbol.TotalSellQuantity.ToString("N2")</div>
+                                            </div>
+                                            <div class="col-4">
+                                                <small class="text-muted">Avg Price</small>
+                                                <div class="fw-bold">@(symbol.SellCount > 0 ? symbol.AverageSellPrice.ToString("C2") : "-")</div>
+                                            </div>
+                                        </div>
+                                        <hr>
+                                        <div class="text-end">
+                                            <small class="text-muted">Total Received:</small>
+                                            <span class="fw-bold text-success">+@symbol.TotalSellAmount.ToString("C2")</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Current Position -->
+                        @if (symbol.CurrentQuantity > 0)
+                        {
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>Current Position:</strong> 
+                                @symbol.CurrentQuantity.ToString("N2") shares @@
+                                @((symbol.CurrentCostBasis / symbol.CurrentQuantity).ToString("C2")) avg cost
+                                (Total: @symbol.CurrentCostBasis.ToString("C2"))
+                            </div>
+                        }
+
+                        <!-- Trade History Table -->
+                        <h6 class="mt-3"><i class="bi bi-clock-history"></i> Trade History</h6>
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th class="text-end">Quantity</th>
+                                    <th class="text-end">Price</th>
+                                    <th class="text-end">Fee</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var trade in symbol.Trades)
+                                {
+                                    var typeClass = trade.Type == "BUY" ? "text-success" : "text-danger";
+                                    var typeBadge = trade.Type == "BUY" ? "bg-success" : "bg-danger";
+                                    <tr>
+                                        <td>@trade.Date.ToString("MM/dd/yyyy")</td>
+                                        <td><span class="badge @typeBadge">@trade.Type</span></td>
+                                        <td class="text-end">@trade.Quantity.ToString("N2")</td>
+                                        <td class="text-end">@trade.Price.ToString("C2")</td>
+                                        <td class="text-end">@trade.Fee.ToString("C2")</td>
+                                        <td class="text-end @typeClass fw-bold">@trade.Total.ToString("C2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No trades found. 
+        <a asp-action="Create">Create your first trade</a> or 
+        <a asp-controller="Import" asp-action="Index">import trades from a CSV file</a>.
+    </div>
+}

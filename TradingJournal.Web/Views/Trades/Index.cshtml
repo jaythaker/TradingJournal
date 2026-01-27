@@ -1,0 +1,98 @@
+@model List<TradingJournal.Web.Models.TradeDto>
+@{
+    ViewData["Title"] = "Trades";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var accounts = ViewBag.Accounts as List<TradingJournal.Web.Models.AccountDto> ?? new List<TradingJournal.Web.Models.AccountDto>();
+    var selectedAccountId = ViewBag.SelectedAccountId as string;
+    var startDate = ViewBag.StartDate as DateTime?;
+    var endDate = ViewBag.EndDate as DateTime?;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1><i class="bi bi-list"></i> All Trades</h1>
+    <div>
+        <a asp-action="Summary" class="btn btn-outline-info me-2">
+            <i class="bi bi-graph-up"></i> By Symbol
+        </a>
+        <a asp-action="Analysis" class="btn btn-outline-info me-2">
+            <i class="bi bi-calendar-check"></i> Analysis
+        </a>
+        <a asp-action="Create" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Trade
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Account</label>
+                <select name="accountId" class="form-select">
+                    <option value="">All Accounts</option>
+                    @foreach (var account in accounts)
+                    {
+                        <option value="@account.Id" selected="@(selectedAccountId == account.Id)">@account.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Start Date</label>
+                <input type="date" name="startDate" class="form-control" value="@(startDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">End Date</label>
+                <input type="date" name="endDate" class="form-control" value="@(endDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-6">
+                <button type="submit" class="btn btn-primary me-2"><i class="bi bi-filter"></i> Apply</button>
+                <a href="@Url.Action("Index")" class="btn btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Symbol</th>
+            <th>Type</th>
+            <th>Quantity</th>
+            <th>Price</th>
+            <th>Total</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var trade in Model)
+        {
+            <tr>
+                <td>@trade.Date.ToString("MM/dd/yyyy")</td>
+                <td>@trade.Symbol</td>
+                <td>
+                    <span class="badge @(trade.Type == "BUY" ? "bg-success" : "bg-danger")">@trade.Type</span>
+                </td>
+                <td>@trade.Quantity</td>
+                <td>$@trade.Price.ToString("N2")</td>
+                <td>$@((trade.Quantity * trade.Price + trade.Fee).ToString("N2"))</td>
+                <td>
+                    <a asp-action="Edit" asp-route-id="@trade.Id" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    <form asp-action="Delete" asp-route-id="@trade.Id" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this trade?');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">No trades found. <a asp-action="Create">Create your first trade</a></div>
+}

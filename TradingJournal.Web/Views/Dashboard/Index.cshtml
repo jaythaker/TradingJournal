@@ -184,6 +184,22 @@
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        // Dark theme colors
+        const chartColors = {
+            primary: '#4f8cff',
+            success: '#00c853',
+            danger: '#ff5252',
+            warning: '#ffc107',
+            info: '#00bcd4',
+            text: '#e8eaed',
+            textMuted: '#9aa0a6',
+            grid: '#3a4150'
+        };
+
+        // Global chart defaults for dark theme
+        Chart.defaults.color = chartColors.textMuted;
+        Chart.defaults.borderColor = chartColors.grid;
+
         // Data from model
         const cumulativePnLData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CumulativePnL));
         const equityCurveData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.EquityCurve));
@@ -192,10 +208,9 @@
         const winningTrades = @Model.WinningTrades;
         const losingTrades = @Model.LosingTrades;
 
-        // Helper to format dates - handle ISO dates without timezone
+        // Helper to format dates
         function formatDate(dateStr) {
             if (!dateStr) return '';
-            // Parse the date string manually to avoid timezone issues
             const parts = dateStr.split('T')[0].split('-');
             if (parts.length !== 3) return dateStr;
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -204,7 +219,7 @@
             return `${month} ${day}`;
         }
 
-        // P&L Chart (Cumulative)
+        // P&L Chart
         if (cumulativePnLData.length > 0) {
             const pnlCtx = document.getElementById('pnlChart').getContext('2d');
             new Chart(pnlCtx, {
@@ -214,10 +229,12 @@
                     datasets: [{
                         label: 'Cumulative P&L',
                         data: cumulativePnLData.map(d => d.value),
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        borderColor: chartColors.success,
+                        backgroundColor: 'rgba(0, 200, 83, 0.1)',
                         fill: true,
-                        tension: 0.1
+                        tension: 0.3,
+                        pointRadius: 2,
+                        pointHoverRadius: 6
                     }]
                 },
                 options: {
@@ -225,6 +242,11 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
+                            backgroundColor: '#2a2f3a',
+                            titleColor: chartColors.text,
+                            bodyColor: chartColors.text,
+                            borderColor: chartColors.grid,
+                            borderWidth: 1,
                             callbacks: {
                                 label: ctx => `$${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
                             }
@@ -232,10 +254,10 @@
                     },
                     scales: {
                         y: {
-                            ticks: {
-                                callback: value => '$' + value.toLocaleString()
-                            }
-                        }
+                            grid: { color: chartColors.grid },
+                            ticks: { callback: value => '$' + value.toLocaleString() }
+                        },
+                        x: { grid: { color: chartColors.grid } }
                     }
                 }
             });
@@ -251,10 +273,12 @@
                     datasets: [{
                         label: 'Equity',
                         data: equityCurveData.map(d => d.value),
-                        borderColor: 'rgb(54, 162, 235)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        borderColor: chartColors.primary,
+                        backgroundColor: 'rgba(79, 140, 255, 0.1)',
                         fill: true,
-                        tension: 0.1
+                        tension: 0.3,
+                        pointRadius: 2,
+                        pointHoverRadius: 6
                     }]
                 },
                 options: {
@@ -262,6 +286,11 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
+                            backgroundColor: '#2a2f3a',
+                            titleColor: chartColors.text,
+                            bodyColor: chartColors.text,
+                            borderColor: chartColors.grid,
+                            borderWidth: 1,
                             callbacks: {
                                 label: ctx => `$${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
                             }
@@ -269,16 +298,16 @@
                     },
                     scales: {
                         y: {
-                            ticks: {
-                                callback: value => '$' + value.toLocaleString()
-                            }
-                        }
+                            grid: { color: chartColors.grid },
+                            ticks: { callback: value => '$' + value.toLocaleString() }
+                        },
+                        x: { grid: { color: chartColors.grid } }
                     }
                 }
             });
         }
 
-        // Dividends Chart (Combined bar + line)
+        // Dividends Chart
         if (cumulativeDividendsData.length > 0) {
             const dividendCtx = document.getElementById('dividendChart').getContext('2d');
             new Chart(dividendCtx, {
@@ -290,30 +319,34 @@
                             label: 'Daily Dividend',
                             type: 'bar',
                             data: dailyDividendsData.map(d => d.value),
-                            backgroundColor: 'rgba(255, 193, 7, 0.6)',
-                            borderColor: 'rgb(255, 193, 7)',
+                            backgroundColor: 'rgba(255, 193, 7, 0.7)',
+                            borderColor: chartColors.warning,
                             borderWidth: 1,
                             yAxisID: 'y'
                         },
                         {
-                            label: 'Cumulative Dividends',
+                            label: 'Cumulative',
                             type: 'line',
                             data: cumulativeDividendsData.map(d => d.value),
-                            borderColor: 'rgb(40, 167, 69)',
+                            borderColor: chartColors.success,
                             backgroundColor: 'transparent',
-                            tension: 0.1,
+                            tension: 0.3,
+                            pointRadius: 2,
                             yAxisID: 'y1'
                         }
                     ]
                 },
                 options: {
                     responsive: true,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
+                        legend: { labels: { color: chartColors.textMuted } },
                         tooltip: {
+                            backgroundColor: '#2a2f3a',
+                            titleColor: chartColors.text,
+                            bodyColor: chartColors.text,
+                            borderColor: chartColors.grid,
+                            borderWidth: 1,
                             callbacks: {
                                 label: ctx => `${ctx.dataset.label}: $${ctx.raw.toLocaleString('en-US', {minimumFractionDigits: 2})}`
                             }
@@ -321,20 +354,17 @@
                     },
                     scales: {
                         y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            title: { display: true, text: 'Daily ($)' },
+                            grid: { color: chartColors.grid },
+                            title: { display: true, text: 'Daily ($)', color: chartColors.textMuted },
                             ticks: { callback: v => '$' + v }
                         },
                         y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            title: { display: true, text: 'Cumulative ($)' },
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: 'Cumulative ($)', color: chartColors.textMuted },
                             ticks: { callback: v => '$' + v },
-                            grid: { drawOnChartArea: false }
-                        }
+                            position: 'right'
+                        },
+                        x: { grid: { color: chartColors.grid } }
                     }
                 }
             });
@@ -349,22 +379,24 @@
                     labels: ['Winning Trades', 'Losing Trades'],
                     datasets: [{
                         data: [winningTrades, losingTrades],
-                        backgroundColor: [
-                            'rgba(40, 167, 69, 0.8)',
-                            'rgba(220, 53, 69, 0.8)'
-                        ],
-                        borderColor: [
-                            'rgb(40, 167, 69)',
-                            'rgb(220, 53, 69)'
-                        ],
-                        borderWidth: 2
+                        backgroundColor: [chartColors.success, chartColors.danger],
+                        borderColor: '#2a2f3a',
+                        borderWidth: 3
                     }]
                 },
                 options: {
                     responsive: true,
                     plugins: {
-                        legend: { position: 'bottom' },
+                        legend: { 
+                            position: 'bottom',
+                            labels: { color: chartColors.textMuted, padding: 20 }
+                        },
                         tooltip: {
+                            backgroundColor: '#2a2f3a',
+                            titleColor: chartColors.text,
+                            bodyColor: chartColors.text,
+                            borderColor: chartColors.grid,
+                            borderWidth: 1,
                             callbacks: {
                                 label: ctx => {
                                     const total = winningTrades + losingTrades;

@@ -79,6 +79,58 @@ Access at http://localhost:5000
    - Register a new account
    - Start tracking your trades!
 
+## CLI Tool
+
+The `tj` CLI tool allows you to import trades and dividends from the command line.
+
+### Install CLI
+
+```bash
+# Install as a global tool
+dotnet tool install --global --add-source ./TradingJournal.Cli/bin/Debug TradingJournal.Cli
+
+# Or run directly
+dotnet run --project TradingJournal.Cli -- <command>
+```
+
+### CLI Commands
+
+```bash
+# Get help
+tj --help
+
+# Login to get a token
+tj login --email user@example.com --password yourpassword
+
+# Set token as environment variable
+export TJ_TOKEN="your-jwt-token"
+
+# List accounts
+tj accounts
+
+# Import trades from Fidelity CSV
+tj import trades --file /path/to/trades.csv --account <account-id>
+
+# Import dividends
+tj import dividends --file /path/to/dividends.csv --account <account-id>
+
+# Show trading summary
+tj summary
+
+# Use custom API URL
+tj --api-url http://localhost:3333 accounts
+```
+
+### CLI Options
+
+| Command | Description |
+|---------|-------------|
+| `tj login` | Login and get JWT token |
+| `tj accounts` | List all accounts |
+| `tj import trades` | Import trades from CSV |
+| `tj import dividends` | Import dividends from CSV |
+| `tj summary` | Show trading summary statistics |
+
 ## Project Structure
 
 ```
@@ -94,6 +146,8 @@ TradingJournal/
 │   ├── Views/                    # Razor views
 │   ├── Models/                   # DTOs
 │   └── Services/                 # API client
+├── TradingJournal.Cli/           # CLI tool
+│   └── Program.cs                # CLI commands
 ├── docker/                       # Docker configuration
 └── TradingJournal.sln           # Solution file
 ```

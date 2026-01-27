@@ -184,19 +184,20 @@
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        // Dark theme colors
+        // Light theme colors
         const chartColors = {
-            primary: '#4f8cff',
-            success: '#00c853',
-            danger: '#ff5252',
+            primary: '#0d6efd',
+            success: '#198754',
+            danger: '#dc3545',
             warning: '#ffc107',
-            info: '#00bcd4',
-            text: '#e8eaed',
-            textMuted: '#9aa0a6',
-            grid: '#3a4150'
+            info: '#0dcaf0',
+            text: '#212529',
+            textMuted: '#6c757d',
+            grid: '#dee2e6',
+            cardBg: '#ffffff'
         };
 
-        // Global chart defaults for dark theme
+        // Global chart defaults for light theme
         Chart.defaults.color = chartColors.textMuted;
         Chart.defaults.borderColor = chartColors.grid;
 
@@ -230,7 +231,7 @@
                         label: 'Cumulative P&L',
                         data: cumulativePnLData.map(d => d.value),
                         borderColor: chartColors.success,
-                        backgroundColor: 'rgba(0, 200, 83, 0.1)',
+                        backgroundColor: 'rgba(25, 135, 84, 0.1)',
                         fill: true,
                         tension: 0.3,
                         pointRadius: 2,
@@ -242,7 +243,7 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            backgroundColor: '#2a2f3a',
+                            backgroundColor: chartColors.cardBg,
                             titleColor: chartColors.text,
                             bodyColor: chartColors.text,
                             borderColor: chartColors.grid,
@@ -274,7 +275,7 @@
                         label: 'Equity',
                         data: equityCurveData.map(d => d.value),
                         borderColor: chartColors.primary,
-                        backgroundColor: 'rgba(79, 140, 255, 0.1)',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
                         fill: true,
                         tension: 0.3,
                         pointRadius: 2,
@@ -286,7 +287,7 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            backgroundColor: '#2a2f3a',
+                            backgroundColor: chartColors.cardBg,
                             titleColor: chartColors.text,
                             bodyColor: chartColors.text,
                             borderColor: chartColors.grid,
@@ -342,7 +343,7 @@
                     plugins: {
                         legend: { labels: { color: chartColors.textMuted } },
                         tooltip: {
-                            backgroundColor: '#2a2f3a',
+                            backgroundColor: chartColors.cardBg,
                             titleColor: chartColors.text,
                             bodyColor: chartColors.text,
                             borderColor: chartColors.grid,
@@ -380,7 +381,7 @@
                     datasets: [{
                         data: [winningTrades, losingTrades],
                         backgroundColor: [chartColors.success, chartColors.danger],
-                        borderColor: '#2a2f3a',
+                        borderColor: chartColors.cardBg,
                         borderWidth: 3
                     }]
                 },
@@ -392,7 +393,7 @@
                             labels: { color: chartColors.textMuted, padding: 20 }
                         },
                         tooltip: {
-                            backgroundColor: '#2a2f3a',
+                            backgroundColor: chartColors.cardBg,
                             titleColor: chartColors.text,
                             bodyColor: chartColors.text,
                             borderColor: chartColors.grid,

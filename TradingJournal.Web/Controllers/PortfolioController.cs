@@ -62,5 +62,36 @@ public class PortfolioController : Controller
             return RedirectToAction("Login", "Auth");
         }
     }
+
+    public async Task<IActionResult> Options(string? accountId = null)
+    {
+        try
+        {
+            // Fetch options positions
+            var optionsEndpoint = string.IsNullOrEmpty(accountId)
+                ? "portfolio/options"
+                : $"portfolio/options?accountId={accountId}";
+            var optionGroups = await _apiClient.GetAsync<List<OptionSpreadGroupDto>>(optionsEndpoint) ?? new List<OptionSpreadGroupDto>();
+
+            var accounts = await _apiClient.GetAsync<List<AccountDto>>("accounts") ?? new List<AccountDto>();
+            ViewBag.Accounts = accounts;
+            ViewBag.SelectedAccountId = accountId;
+            
+            // Options summary
+            var optionsNetPremium = optionGroups.Sum(g => g.NetPremium);
+            var openStrategies = optionGroups.Count(g => g.IsOpen);
+            var closedStrategies = optionGroups.Count(g => !g.IsOpen);
+            
+            ViewBag.OptionsNetPremium = optionsNetPremium;
+            ViewBag.OpenStrategies = openStrategies;
+            ViewBag.ClosedStrategies = closedStrategies;
+
+            return View(optionGroups);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return RedirectToAction("Login", "Auth");
+        }
+    }
 }
 

@@ -419,26 +419,23 @@ public class FidelityImporter : ITradeImporter
         if (!optionsTrades.Any())
             return;
             
-        // Group by date and underlying symbol
-        var groups = optionsTrades
+        // First pass: Group by date and underlying for same-expiration spreads
+        var sameExpirationGroups = optionsTrades
             .Where(t => t.UnderlyingSymbol != null && t.ExpirationDate.HasValue)
             .GroupBy(t => new { Date = t.Date.Date, t.UnderlyingSymbol, t.ExpirationDate })
-            .Where(g => g.Count() >= 2) // Need at least 2 legs for a spread
+            .Where(g => g.Count() >= 2)
             .ToList();
             
-        foreach (var group in groups)
+        foreach (var group in sameExpirationGroups)
         {
             var trades = group.OrderBy(t => t.StrikePrice).ToList();
             
-            // Analyze the spread type
             var spreadType = AnalyzeSpreadType(trades);
             if (spreadType == SpreadType.Single)
                 continue;
                 
-            // Create a spread group ID
             var spreadGroupId = Guid.NewGuid().ToString();
             
-            // Update all trades in the spread
             int legNumber = 1;
             foreach (var trade in trades)
             {
@@ -446,6 +443,70 @@ public class FidelityImporter : ITradeImporter
                 trade.SpreadGroupId = spreadGroupId;
                 trade.SpreadLegNumber = legNumber++;
                 trade.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        
+        // Second pass: Check for calendar spreads (same strike, different expiration)
+        var remainingTrades = optionsTrades
+            .Where(t => t.SpreadGroupId == null && t.UnderlyingSymbol != null && t.ExpirationDate.HasValue && t.StrikePrice.HasValue)
+            .ToList();
+            
+        var calendarGroups = remainingTrades
+            .GroupBy(t => new { Date = t.Date.Date, t.UnderlyingSymbol, t.StrikePrice, t.OptionType })
+            .Where(g => g.Count() >= 2 && g.Select(t => t.ExpirationDate).Distinct().Count() >= 2)
+            .ToList();
+            
+        foreach (var group in calendarGroups)
+        {
+            var trades = group.OrderBy(t => t.ExpirationDate).ToList();
+            
+            // Calendar spread: same strike, different expirations
+            if (trades.Count == 2)
+            {
+                var buyCount = trades.Count(t => t.Type.Contains("BUY", StringComparison.OrdinalIgnoreCase));
+                var sellCount = trades.Count(t => t.Type.Contains("SELL", StringComparison.OrdinalIgnoreCase));
+                
+                // Calendar spreads typically have 1 buy and 1 sell
+                if (buyCount == 1 && sellCount == 1)
+                {
+                    var spreadGroupId = Guid.NewGuid().ToString();
+                    int legNumber = 1;
+                    foreach (var trade in trades)
+                    {
+                        trade.SpreadType = SpreadType.Calendar;
+                        trade.SpreadGroupId = spreadGroupId;
+                        trade.SpreadLegNumber = legNumber++;
+                        trade.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+            }
+        }
+        
+        // Third pass: Check for ratio spreads (unequal quantities)
+        var remainingForRatio = optionsTrades
+            .Where(t => t.SpreadGroupId == null && t.UnderlyingSymbol != null && t.ExpirationDate.HasValue)
+            .GroupBy(t => new { Date = t.Date.Date, t.UnderlyingSymbol, t.ExpirationDate, t.OptionType })
+            .Where(g => g.Count() >= 2)
+            .ToList();
+            
+        foreach (var group in remainingForRatio)
+        {
+            var trades = group.OrderBy(t => t.StrikePrice).ToList();
+            
+            // Check for ratio spread (unequal quantities)
+            var quantities = trades.Select(t => t.Quantity).Distinct().ToList();
+            if (quantities.Count > 1)
+            {
+                // This is likely a ratio spread
+                var spreadGroupId = Guid.NewGuid().ToString();
+                int legNumber = 1;
+                foreach (var trade in trades)
+                {
+                    trade.SpreadType = SpreadType.Custom; // Ratio spreads are custom
+                    trade.SpreadGroupId = spreadGroupId;
+                    trade.SpreadLegNumber = legNumber++;
+                    trade.UpdatedAt = DateTime.UtcNow;
+                }
             }
         }
         

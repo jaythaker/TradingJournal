@@ -15,7 +15,7 @@ public class TradesController : Controller
         _apiClient = apiClient;
     }
 
-    public async Task<IActionResult> Index(string? accountId = null, DateTime? startDate = null, DateTime? endDate = null)
+    public async Task<IActionResult> Index(string? accountId = null, string? instrumentFilter = null, DateTime? startDate = null, DateTime? endDate = null)
     {
         try
         {
@@ -40,9 +40,20 @@ public class TradesController : Controller
 
             var trades = await _apiClient.GetAsync<List<TradeDto>>(endpoint) ?? new List<TradeDto>();
             
+            // Filter by instrument type
+            if (instrumentFilter == "stock")
+            {
+                trades = trades.Where(t => t.InstrumentType == "Stock").ToList();
+            }
+            else if (instrumentFilter == "option")
+            {
+                trades = trades.Where(t => t.InstrumentType == "Option").ToList();
+            }
+            
             var accounts = await _apiClient.GetAsync<List<AccountDto>>("accounts") ?? new List<AccountDto>();
             ViewBag.Accounts = accounts;
             ViewBag.SelectedAccountId = accountId;
+            ViewBag.InstrumentFilter = instrumentFilter ?? "all";
             ViewBag.StartDate = startDate;
             ViewBag.EndDate = endDate;
 
@@ -233,6 +244,63 @@ public class TradesController : Controller
             ViewBag.EndDate = endDate;
 
             return View(analysis);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return RedirectToAction("Login", "Auth");
+        }
+    }
+
+    public async Task<IActionResult> Options(string? accountId = null, string? underlying = null, DateTime? startDate = null, DateTime? endDate = null)
+    {
+        try
+        {
+            // Default to current year if no dates provided
+            if (!startDate.HasValue && !endDate.HasValue)
+            {
+                startDate = new DateTime(DateTime.Today.Year, 1, 1);
+                endDate = DateTime.Today;
+            }
+
+            var queryParams = new List<string>();
+            if (!string.IsNullOrEmpty(accountId))
+                queryParams.Add($"accountId={accountId}");
+            if (startDate.HasValue)
+                queryParams.Add($"startDate={startDate.Value:yyyy-MM-dd}");
+            if (endDate.HasValue)
+                queryParams.Add($"endDate={endDate.Value:yyyy-MM-dd}");
+
+            var endpoint = "trades";
+            if (queryParams.Any())
+                endpoint += "?" + string.Join("&", queryParams);
+
+            var allTrades = await _apiClient.GetAsync<List<TradeDto>>(endpoint) ?? new List<TradeDto>();
+            
+            // Filter to options only
+            var optionsTrades = allTrades.Where(t => t.InstrumentType == "Option").ToList();
+            
+            // Filter by underlying if specified
+            if (!string.IsNullOrEmpty(underlying))
+            {
+                optionsTrades = optionsTrades.Where(t => t.UnderlyingSymbol == underlying).ToList();
+            }
+            
+            var accounts = await _apiClient.GetAsync<List<AccountDto>>("accounts") ?? new List<AccountDto>();
+            ViewBag.Accounts = accounts;
+            ViewBag.SelectedAccountId = accountId;
+            ViewBag.Underlying = underlying;
+            ViewBag.StartDate = startDate;
+            ViewBag.EndDate = endDate;
+            
+            // Get unique underlying symbols
+            ViewBag.UnderlyingSymbols = optionsTrades
+                .Where(t => !string.IsNullOrEmpty(t.UnderlyingSymbol))
+                .Select(t => t.UnderlyingSymbol!)
+                .Distinct()
+                .OrderBy(s => s)
+                .ToList();
+
+            return View(optionsTrades);
         }
         catch (UnauthorizedAccessException)
         {

@@ -1,0 +1,418 @@
+@model List<TradingJournal.Web.Models.TradeDto>
+@{
+    ViewData["Title"] = "Options Trades";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var accounts = ViewBag.Accounts as List<TradingJournal.Web.Models.AccountDto> ?? new List<TradingJournal.Web.Models.AccountDto>();
+    var underlyingSymbols = ViewBag.UnderlyingSymbols as List<string> ?? new List<string>();
+    var selectedAccountId = ViewBag.SelectedAccountId as string;
+    var selectedUnderlying = ViewBag.Underlying as string;
+    var startDate = ViewBag.StartDate as DateTime?;
+    var endDate = ViewBag.EndDate as DateTime?;
+    
+    // Group trades by spread
+    var spreadGroups = Model.Where(t => !string.IsNullOrEmpty(t.SpreadGroupId))
+        .GroupBy(t => t.SpreadGroupId)
+        .ToDictionary(g => g.Key!, g => g.OrderBy(t => t.SpreadLegNumber).ToList());
+    var singleTrades = Model.Where(t => string.IsNullOrEmpty(t.SpreadGroupId)).ToList();
+    
+    // Calculate statistics
+    var openingTrades = Model.Where(t => t.IsOpeningTrade == true).ToList();
+    var closingTrades = Model.Where(t => t.IsOpeningTrade == false).ToList();
+    
+    double totalPremiumReceived = Model
+        .Where(t => t.Type.Contains("SELL"))
+        .Sum(t => t.Price * t.Quantity * t.ContractMultiplier);
+    double totalPremiumPaid = Model
+        .Where(t => t.Type.Contains("BUY"))
+        .Sum(t => t.Price * t.Quantity * t.ContractMultiplier);
+    double netPremium = totalPremiumReceived - totalPremiumPaid;
+    
+    var callTrades = Model.Where(t => t.OptionType == "Call").ToList();
+    var putTrades = Model.Where(t => t.OptionType == "Put").ToList();
+    
+    // Group by underlying
+    var byUnderlying = Model.Where(t => !string.IsNullOrEmpty(t.UnderlyingSymbol))
+        .GroupBy(t => t.UnderlyingSymbol!)
+        .Select(g => new {
+            Symbol = g.Key,
+            TradeCount = g.Count(),
+            Premium = g.Where(t => t.Type.Contains("SELL")).Sum(t => t.Price * t.Quantity * t.ContractMultiplier) -
+                      g.Where(t => t.Type.Contains("BUY")).Sum(t => t.Price * t.Quantity * t.ContractMultiplier)
+        })
+        .OrderByDescending(x => Math.Abs(x.Premium))
+        .Take(10)
+        .ToList();
+    
+    // Expiring soon (within 30 days)
+    var expiringSoon = Model.Where(t => t.ExpirationDate.HasValue && 
+        t.ExpirationDate.Value > DateTime.Today &&
+        t.ExpirationDate.Value <= DateTime.Today.AddDays(30))
+        .OrderBy(t => t.ExpirationDate)
+        .ToList();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1><i class="bi bi-lightning text-warning"></i> Options Trades</h1>
+    <div>
+        <a asp-action="Index" class="btn btn-outline-secondary me-2">
+            <i class="bi bi-list"></i> All Trades
+        </a>
+        <a asp-action="Create" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Trade
+        </a>
+    </div>
+</div>
+
+<!-- Options Statistics -->
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card bg-warning bg-opacity-10 border-warning">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Total Options</h6>
+                <h3 class="text-warning">@Model.Count</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Calls</h6>
+                <h3 class="text-primary">@callTrades.Count</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Puts</h6>
+                <h3 class="text-info">@putTrades.Count</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Spreads</h6>
+                <h3 class="text-secondary">@spreadGroups.Count</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card @(netPremium >= 0 ? "bg-success bg-opacity-10 border-success" : "bg-danger bg-opacity-10 border-danger")">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Net Premium</h6>
+                <h3 class="@(netPremium >= 0 ? "text-success" : "text-danger")">
+                    @(netPremium >= 0 ? "+" : "")$@netPremium.ToString("N0")
+                </h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card @(expiringSoon.Any() ? "bg-warning bg-opacity-25 border-warning" : "")">
+            <div class="card-body text-center">
+                <h6 class="card-title text-muted">Expiring Soon</h6>
+                <h3 class="@(expiringSoon.Any() ? "text-warning" : "")">@expiringSoon.Count</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Account</label>
+                <select name="accountId" class="form-select">
+                    <option value="">All Accounts</option>
+                    @foreach (var account in accounts)
+                    {
+                        <option value="@account.Id" selected="@(selectedAccountId == account.Id)">@account.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Underlying</label>
+                <select name="underlying" class="form-select">
+                    <option value="">All Underlyings</option>
+                    @foreach (var symbol in underlyingSymbols)
+                    {
+                        <option value="@symbol" selected="@(selectedUnderlying == symbol)">@symbol</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Start Date</label>
+                <input type="date" name="startDate" class="form-control" value="@(startDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">End Date</label>
+                <input type="date" name="endDate" class="form-control" value="@(endDate?.ToString("yyyy-MM-dd"))" />
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary me-2"><i class="bi bi-filter"></i> Apply</button>
+                <a href="@Url.Action("Options")" class="btn btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main content -->
+    <div class="col-md-8">
+        <!-- Spreads Section -->
+        @if (spreadGroups.Any())
+        {
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-layers"></i> Spread Strategies (@spreadGroups.Count)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="accordion" id="spreadAccordion">
+                        @{int spreadIndex = 0;}
+                        @foreach (var spread in spreadGroups)
+                        {
+                            var legs = spread.Value;
+                            var firstLeg = legs.First();
+                            var spreadType = firstLeg.SpreadType;
+                            var underlying = firstLeg.UnderlyingSymbol ?? "Unknown";
+                            var expiration = firstLeg.ExpirationDate?.ToString("MM/dd/yy") ?? "";
+                            var netSpreadPremium = legs.Where(t => t.Type.Contains("SELL")).Sum(t => t.Price * t.Quantity * t.ContractMultiplier) -
+                                                   legs.Where(t => t.Type.Contains("BUY")).Sum(t => t.Price * t.Quantity * t.ContractMultiplier);
+                            
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#spread-@spreadIndex">
+                                        <span class="badge bg-info me-2">@spreadType</span>
+                                        <strong class="me-2">@underlying</strong>
+                                        <span class="text-muted me-2">Exp: @expiration</span>
+                                        <span class="ms-auto @(netSpreadPremium >= 0 ? "text-success" : "text-danger")">
+                                            @(netSpreadPremium >= 0 ? "+" : "")$@netSpreadPremium.ToString("N2")
+                                        </span>
+                                    </button>
+                                </h2>
+                                <div id="spread-@spreadIndex" class="accordion-collapse collapse" data-bs-parent="#spreadAccordion">
+                                    <div class="accordion-body p-0">
+                                        <table class="table table-sm mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Leg</th>
+                                                    <th>Type</th>
+                                                    <th>Strike</th>
+                                                    <th>C/P</th>
+                                                    <th class="text-end">Qty</th>
+                                                    <th class="text-end">Price</th>
+                                                    <th class="text-end">Premium</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var leg in legs)
+                                                {
+                                                    var legPremium = leg.Price * leg.Quantity * leg.ContractMultiplier;
+                                                    var isSell = leg.Type.Contains("SELL");
+                                                    <tr>
+                                                        <td><span class="badge bg-secondary">@leg.SpreadLegNumber</span></td>
+                                                        <td>
+                                                            <span class="badge @(isSell ? "bg-danger" : "bg-success")">@leg.Type</span>
+                                                        </td>
+                                                        <td class="text-primary fw-bold">$@leg.StrikePrice?.ToString("N0")</td>
+                                                        <td><span class="badge @(leg.OptionType == "Call" ? "bg-primary" : "bg-info")">@leg.OptionType</span></td>
+                                                        <td class="text-end">@leg.Quantity</td>
+                                                        <td class="text-end">$@leg.Price.ToString("N2")</td>
+                                                        <td class="text-end @(isSell ? "text-success" : "text-danger")">
+                                                            @(isSell ? "+" : "-")$@legPremium.ToString("N2")
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            spreadIndex++;
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Single Trades Section -->
+        @if (singleTrades.Any())
+        {
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-card-list"></i> Single Leg Trades (@singleTrades.Count)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-striped mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Date</th>
+                                <th>Underlying</th>
+                                <th>Strike</th>
+                                <th>Type</th>
+                                <th>Exp</th>
+                                <th class="text-end">Qty</th>
+                                <th class="text-end">Price</th>
+                                <th class="text-end">Premium</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var trade in singleTrades.OrderByDescending(t => t.Date))
+                            {
+                                var premium = trade.Price * trade.Quantity * trade.ContractMultiplier;
+                                var isSell = trade.Type.Contains("SELL");
+                                <tr>
+                                    <td>@trade.Date.ToString("MM/dd/yy")</td>
+                                    <td><strong>@trade.UnderlyingSymbol</strong></td>
+                                    <td class="text-primary">$@trade.StrikePrice?.ToString("N0")</td>
+                                    <td>
+                                        <span class="badge @(isSell ? "bg-danger" : "bg-success")">@trade.Type</span>
+                                        <span class="badge @(trade.OptionType == "Call" ? "bg-primary" : "bg-info")">@trade.OptionType</span>
+                                    </td>
+                                    <td>@trade.ExpirationDate?.ToString("MM/dd/yy")</td>
+                                    <td class="text-end">@trade.Quantity</td>
+                                    <td class="text-end">$@trade.Price.ToString("N2")</td>
+                                    <td class="text-end @(isSell ? "text-success" : "text-danger")">
+                                        @(isSell ? "+" : "-")$@premium.ToString("N2")
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="col-md-4">
+        <!-- By Underlying -->
+        @if (byUnderlying.Any())
+        {
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-bar-chart"></i> By Underlying</h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Symbol</th>
+                                <th class="text-center">Trades</th>
+                                <th class="text-end">Net Premium</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in byUnderlying)
+                            {
+                                <tr>
+                                    <td>
+                                        <a href="@Url.Action("Options", new { underlying = item.Symbol, startDate = startDate, endDate = endDate })">
+                                            <strong>@item.Symbol</strong>
+                                        </a>
+                                    </td>
+                                    <td class="text-center">@item.TradeCount</td>
+                                    <td class="text-end @(item.Premium >= 0 ? "text-success" : "text-danger")">
+                                        @(item.Premium >= 0 ? "+" : "")$@item.Premium.ToString("N0")
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        
+        <!-- Expiring Soon -->
+        @if (expiringSoon.Any())
+        {
+            <div class="card mb-4 border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0"><i class="bi bi-clock-history"></i> Expiring Within 30 Days</h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            @foreach (var trade in expiringSoon.Take(10))
+                            {
+                                var daysToExp = (trade.ExpirationDate!.Value - DateTime.Today).Days;
+                                <tr>
+                                    <td>
+                                        <strong>@trade.UnderlyingSymbol</strong>
+                                        <span class="text-muted">$@trade.StrikePrice?.ToString("N0")@(trade.OptionType == "Call" ? "C" : "P")</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="badge @(daysToExp <= 7 ? "bg-danger" : daysToExp <= 14 ? "bg-warning" : "bg-secondary")">
+                                            @daysToExp days
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        
+        <!-- Premium Summary -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-cash-stack"></i> Premium Summary</h6>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <td>Premium Received</td>
+                        <td class="text-end text-success">+$@totalPremiumReceived.ToString("N2")</td>
+                    </tr>
+                    <tr>
+                        <td>Premium Paid</td>
+                        <td class="text-end text-danger">-$@totalPremiumPaid.ToString("N2")</td>
+                    </tr>
+                    <tr class="table-active fw-bold">
+                        <td>Net Premium</td>
+                        <td class="text-end @(netPremium >= 0 ? "text-success" : "text-danger")">
+                            @(netPremium >= 0 ? "+" : "")$@netPremium.ToString("N2")
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Trade Type Breakdown -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-pie-chart"></i> Trade Types</h6>
+            </div>
+            <div class="card-body">
+                @{
+                    var typeGroups = Model.GroupBy(t => t.Type).OrderByDescending(g => g.Count()).ToList();
+                }
+                @foreach (var typeGroup in typeGroups)
+                {
+                    var percentage = (double)typeGroup.Count() / Model.Count * 100;
+                    var badgeClass = typeGroup.Key.Contains("BUY") ? "bg-success" : "bg-danger";
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between">
+                            <span class="badge @badgeClass">@typeGroup.Key</span>
+                            <span>@typeGroup.Count() (@percentage.ToString("N0")%)</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar @(typeGroup.Key.Contains("BUY") ? "bg-success" : "bg-danger")" 
+                                 style="width: @percentage%"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No options trades found. 
+        <a asp-action="Index">View all trades</a> or import trades with options.
+    </div>
+}

@@ -7,6 +7,7 @@ auto-activates:
   - "upload fidelity"
   - "import dividends"
   - "parse csv"
+  - "import options"
 ---
 
 # Skill: Import Trades
@@ -16,6 +17,7 @@ auto-activates:
 This skill activates when you need to:
 - Import trades from Fidelity CSV exports
 - Import dividends from broker statements
+- Import options trades with spread detection
 - Troubleshoot import errors
 - Add support for new broker formats
 
@@ -62,6 +64,7 @@ The import shows:
 ### Step 4: Verify Imported Data
 
 - Check **Trades** page for imported trades
+- Check **Options** page for options trades and spreads
 - Check **Dividends** page for imported dividends
 - Review **Dashboard** for updated metrics
 
@@ -96,27 +99,51 @@ Symbol,Type,Quantity,Price,Fee,Date,Notes
 AAPL,BUY,100,150.50,4.95,2024-01-15,First purchase
 ```
 
-## Options Import
+## Options Import Features
 
+### Symbol Format (OCC Standard)
 Options are detected by symbol format:
 ```
 -AAPL250117C00150000
-     │     │  │
-     │     │  └── Strike $150.00
-     │     └── Call option
-     └── Expires Jan 17, 2025
+ │    │     │  │
+ │    │     │  └── Strike $150.00 (8 digits / 1000)
+ │    │     └── C=Call, P=Put
+ │    └── Expiration YYMMDD (Jan 17, 2025)
+ └── Underlying symbol
 ```
 
-**Trade types detected:**
+### Trade Types Detected
 - `BUY_TO_OPEN` - Opening long position
 - `SELL_TO_OPEN` - Opening short position (writing)
 - `BUY_TO_CLOSE` - Closing short position
 - `SELL_TO_CLOSE` - Closing long position
+- `ASSIGNED` - Options assignment
+- `EXERCISED` - Options exercise
+- `EXPIRED` - Options expiration
 
-**Spreads detected:**
-- Credit spreads (receive premium)
-- Debit spreads (pay premium)
-- Iron condors, straddles, etc.
+### Spread Detection (Auto-Detected)
+
+After import, spreads are automatically detected and grouped:
+
+| Spread Type | Description | Detection Logic |
+|-------------|-------------|-----------------|
+| **Credit Spread** | 2 legs, same type, receive premium | Buy + Sell same type, net credit |
+| **Debit Spread** | 2 legs, same type, pay premium | Buy + Sell same type, net debit |
+| **Iron Condor** | 4 legs, 2 calls + 2 puts | 4 trades, 2C + 2P, same expiry |
+| **Straddle** | Call + Put, same strike | 2 trades, C + P, same strike |
+| **Strangle** | Call + Put, different strikes | 2 trades, C + P, different strikes |
+| **Butterfly** | 3 legs, same option type | 3 trades, all C or all P |
+| **Calendar** | Same strike, different expiry | Same underlying/strike, diff exp |
+| **Custom** | Ratio spreads, complex | Unequal quantities |
+
+### Options View Features
+
+Navigate to **Trades → Options** to see:
+- Options statistics (calls, puts, net premium)
+- Spread groups with leg breakdown
+- Single leg trades
+- Expiring soon alerts (within 30 days)
+- Premium summary by underlying
 
 ## Common Issues and Solutions
 
@@ -132,15 +159,28 @@ curl -X DELETE -H "Authorization: Bearer $TJ_TOKEN" \
 **Solution:** Ensure dates are in recognizable format (MM/DD/YYYY or YYYY-MM-DD)
 
 **Issue:** Options not detected
-**Solution:** Check symbol format matches OCC standard. Verify option columns:
-- instrumentType should be "Option"
-- optionType should be "Call" or "Put"
+**Solution:** Check symbol format matches OCC standard. Symbol should be:
+- 1-6 letter underlying
+- 6-digit date (YYMMDD)
+- C or P
+- 8-digit strike (price × 1000)
+
+**Issue:** Spreads not grouped
+**Solution:** Spreads require:
+- Same trade date
+- Same underlying symbol
+- Same expiration (except calendars)
+- At least 2 legs
+
+**Issue:** Wrong spread type assigned
+**Solution:** Spread detection is based on:
+- Number of legs
+- Call/Put mix
+- Buy/Sell directions
+- Net premium (credit vs debit)
 
 **Issue:** Negative quantities
 **Solution:** Import service handles this automatically (uses absolute value)
-
-**Issue:** Wrong account selected
-**Solution:** Re-import to correct account. Delete trades from wrong account first.
 
 ## Adding New Broker Support
 
@@ -163,6 +203,13 @@ public class NewBrokerImporter : ITradeImporter
     public async Task<ImportResult> ImportAsync(...)
     {
         // Parse CSV and create Trade entities
+        // For options, set:
+        // - InstrumentType = InstrumentType.Option
+        // - OptionType = Call/Put
+        // - StrikePrice = strike value
+        // - ExpirationDate = expiration
+        // - UnderlyingSymbol = underlying ticker
+        // - IsOpeningTrade = true/false
     }
 }
 ```
@@ -171,7 +218,9 @@ public class NewBrokerImporter : ITradeImporter
 
 - ✅ CSV file uploaded successfully
 - ✅ Trades appear in Trades list
+- ✅ Options trades marked with InstrumentType=Option
+- ✅ Strike price and expiration parsed correctly
+- ✅ Spreads auto-detected and grouped
+- ✅ Options page shows spreads with legs
 - ✅ Dividends appear in Dividends list
-- ✅ Options trades show correct strike/expiration
-- ✅ Spreads grouped correctly
 - ✅ Dashboard metrics updated

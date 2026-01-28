@@ -6,11 +6,19 @@
     var selectedAccountId = ViewBag.SelectedAccountId as string;
     var startDate = ViewBag.StartDate as DateTime?;
     var endDate = ViewBag.EndDate as DateTime?;
+    var instrumentFilter = ViewBag.InstrumentFilter as string ?? "all";
+    
+    var stockTrades = Model.Where(t => t.InstrumentType == "Stock").ToList();
+    var optionTrades = Model.Where(t => t.InstrumentType == "Option").ToList();
+    var spreadGroups = optionTrades.Where(t => !string.IsNullOrEmpty(t.SpreadGroupId)).GroupBy(t => t.SpreadGroupId).ToList();
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1><i class="bi bi-list"></i> All Trades</h1>
     <div>
+        <a asp-action="Options" class="btn btn-outline-warning me-2">
+            <i class="bi bi-lightning"></i> Options
+        </a>
         <a asp-action="Summary" class="btn btn-outline-info me-2">
             <i class="bi bi-graph-up"></i> By Symbol
         </a>
@@ -20,6 +28,42 @@
         <a asp-action="Create" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> New Trade
         </a>
+    </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h5 class="card-title text-muted">Total Trades</h5>
+                <h3>@Model.Count</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h5 class="card-title text-muted">Stock Trades</h5>
+                <h3>@stockTrades.Count</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h5 class="card-title text-muted">Options Trades</h5>
+                <h3 class="text-warning">@optionTrades.Count</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light">
+            <div class="card-body text-center">
+                <h5 class="card-title text-muted">Spread Groups</h5>
+                <h3 class="text-info">@spreadGroups.Count</h3>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -38,6 +82,14 @@
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label">Instrument</label>
+                <select name="instrumentFilter" class="form-select">
+                    <option value="all" selected="@(instrumentFilter == "all")">All Types</option>
+                    <option value="stock" selected="@(instrumentFilter == "stock")">Stocks Only</option>
+                    <option value="option" selected="@(instrumentFilter == "option")">Options Only</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Start Date</label>
                 <input type="date" name="startDate" class="form-control" value="@(startDate?.ToString("yyyy-MM-dd"))" />
             </div>
@@ -45,7 +97,7 @@
                 <label class="form-label">End Date</label>
                 <input type="date" name="endDate" class="form-control" value="@(endDate?.ToString("yyyy-MM-dd"))" />
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <button type="submit" class="btn btn-primary me-2"><i class="bi bi-filter"></i> Apply</button>
                 <a href="@Url.Action("Index")" class="btn btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
             </div>
@@ -54,29 +106,84 @@
 </div>
 
 <table class="table table-striped">
-    <thead>
+    <thead class="table-dark">
         <tr>
             <th>Date</th>
             <th>Symbol</th>
             <th>Type</th>
-            <th>Quantity</th>
-            <th>Price</th>
-            <th>Total</th>
+            <th>Details</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Price</th>
+            <th class="text-end">Total</th>
             <th>Actions</th>
         </tr>
     </thead>
     <tbody>
         @foreach (var trade in Model)
         {
-            <tr>
+            var isBuy = trade.Type.Contains("BUY");
+            var isOption = trade.IsOption;
+            var total = isOption ? trade.NotionalValue + trade.Fee : trade.Quantity * trade.Price + trade.Fee;
+            
+            <tr class="@(isOption ? "table-warning-subtle" : "")">
                 <td>@trade.Date.ToString("MM/dd/yyyy")</td>
-                <td>@trade.Symbol</td>
                 <td>
-                    <span class="badge @(trade.Type == "BUY" ? "bg-success" : "bg-danger")">@trade.Type</span>
+                    @if (isOption)
+                    {
+                        <span class="fw-bold">@trade.UnderlyingSymbol</span>
+                        <br />
+                        <small class="text-muted">@trade.Symbol</small>
+                    }
+                    else
+                    {
+                        <span class="fw-bold">@trade.Symbol</span>
+                    }
                 </td>
-                <td>@trade.Quantity</td>
-                <td>$@trade.Price.ToString("N2")</td>
-                <td>$@((trade.Quantity * trade.Price + trade.Fee).ToString("N2"))</td>
+                <td>
+                    @{
+                        var badgeClass = isBuy ? "bg-success" : "bg-danger";
+                        if (trade.Type.Contains("OPEN")) badgeClass = isBuy ? "bg-success" : "bg-warning";
+                        if (trade.Type.Contains("CLOSE")) badgeClass = isBuy ? "bg-info" : "bg-danger";
+                        if (trade.Type == "ASSIGNED") badgeClass = "bg-secondary";
+                        if (trade.Type == "EXERCISED") badgeClass = "bg-primary";
+                        if (trade.Type == "EXPIRED") badgeClass = "bg-dark";
+                    }
+                    <span class="badge @badgeClass">@trade.Type</span>
+                    @if (isOption)
+                    {
+                        <br />
+                        <span class="badge bg-warning text-dark">@trade.OptionType</span>
+                    }
+                </td>
+                <td>
+                    @if (isOption)
+                    {
+                        <span class="text-primary">$@trade.StrikePrice?.ToString("N0")</span>
+                        <span class="text-muted">@(trade.OptionType == "Call" ? "C" : "P")</span>
+                        <br />
+                        <small class="text-muted">Exp: @trade.ExpirationDate?.ToString("MM/dd/yy")</small>
+                        @if (!string.IsNullOrEmpty(trade.SpreadGroupId))
+                        {
+                            <br />
+                            <span class="badge bg-info">@trade.SpreadType Leg @trade.SpreadLegNumber</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">Stock</span>
+                    }
+                </td>
+                <td class="text-end">
+                    @trade.Quantity
+                    @if (isOption)
+                    {
+                        <small class="text-muted">x@trade.ContractMultiplier</small>
+                    }
+                </td>
+                <td class="text-end">$@trade.Price.ToString("N2")</td>
+                <td class="text-end @(isBuy ? "text-danger" : "text-success")">
+                    @(isBuy ? "-" : "+")$@total.ToString("N2")
+                </td>
                 <td>
                     <a asp-action="Edit" asp-route-id="@trade.Id" class="btn btn-sm btn-outline-primary">
                         <i class="bi bi-pencil"></i>
@@ -96,3 +203,9 @@
 {
     <div class="alert alert-info">No trades found. <a asp-action="Create">Create your first trade</a></div>
 }
+
+<style>
+    .table-warning-subtle {
+        background-color: rgba(255, 193, 7, 0.1) !important;
+    }
+</style>

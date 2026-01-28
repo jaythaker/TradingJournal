@@ -6,6 +6,23 @@
     var totalCostBasis = (double)(ViewBag.TotalCostBasis ?? 0);
     var totalUnrealizedPnL = (double)(ViewBag.TotalUnrealizedPnL ?? 0);
     var totalUnrealizedPnLPercent = (double)(ViewBag.TotalUnrealizedPnLPercent ?? 0);
+    var optionGroups = (List<TradingJournal.Web.Models.OptionSpreadGroupDto>)(ViewBag.OptionGroups ?? new List<TradingJournal.Web.Models.OptionSpreadGroupDto>());
+    var optionsNetPremium = (double)(ViewBag.OptionsNetPremium ?? 0);
+    var openStrategies = (int)(ViewBag.OpenStrategies ?? 0);
+    var closedStrategies = (int)(ViewBag.ClosedStrategies ?? 0);
+    
+    string GetStrategyBadgeClass(string spreadType) => spreadType switch
+    {
+        "CreditSpread" => "bg-success",
+        "DebitSpread" => "bg-danger",
+        "IronCondor" => "bg-primary",
+        "Straddle" => "bg-info",
+        "Strangle" => "bg-info",
+        "Calendar" => "bg-secondary",
+        "Butterfly" => "bg-warning text-dark",
+        "Custom" => "bg-dark",
+        _ => "bg-secondary"
+    };
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -30,6 +47,7 @@
     </div>
 }
 
+<!-- Stock Summary -->
 <div class="row mb-4">
     <div class="col-md-3">
         <div class="card text-center">
@@ -63,12 +81,53 @@
     <div class="col-md-3">
         <div class="card text-center">
             <div class="card-body">
-                <h6 class="card-title text-muted">Open Positions</h6>
+                <h6 class="card-title text-muted">Stock Positions</h6>
                 <h3 class="text-secondary">@Model.Count</h3>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Options Summary -->
+@if (optionGroups.Any())
+{
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center border-warning">
+                <div class="card-body">
+                    <h6 class="card-title text-muted"><i class="bi bi-lightning text-warning"></i> Options Strategies</h6>
+                    <h3 class="text-warning">@optionGroups.Count</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Open Strategies</h6>
+                    <h3 class="text-success">@openStrategies</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-secondary">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Closed Strategies</h6>
+                    <h3 class="text-secondary">@closedStrategies</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center @(optionsNetPremium >= 0 ? "border-success" : "border-danger")">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Net Premium</h6>
+                    <h3 class="@(optionsNetPremium >= 0 ? "text-success" : "text-danger")">
+                        @(optionsNetPremium >= 0 ? "+" : "")@optionsNetPremium.ToString("C2")
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @if (Model.Any())
 {
@@ -166,12 +225,156 @@
         </div>
     </div>
 }
-else
+else if (!optionGroups.Any())
 {
     <div class="alert alert-info">
         <i class="bi bi-info-circle"></i> No open positions found. 
         <a asp-controller="Trades" asp-action="Create">Add your first trade</a> or 
         <a asp-controller="Trades" asp-action="Summary">view closed positions</a>.
+    </div>
+}
+
+<!-- Options Strategies Section -->
+@if (optionGroups.Any())
+{
+    <div class="card mt-4">
+        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-lightning"></i> Options Strategies</h5>
+            <a asp-controller="Trades" asp-action="Options" class="btn btn-sm btn-dark">
+                <i class="bi bi-list"></i> View All Options
+            </a>
+        </div>
+        <div class="card-body p-0">
+            <div class="accordion" id="optionsAccordion">
+                @{
+                    var groupIndex = 0;
+                    var groupedByUnderlying = optionGroups.GroupBy(g => g.UnderlyingSymbol).OrderBy(g => g.Key);
+                }
+                @foreach (var underlyingGroup in groupedByUnderlying)
+                {
+                    var underlying = underlyingGroup.Key;
+                    var strategies = underlyingGroup.ToList();
+                    var underlyingNetPremium = strategies.Sum(s => s.NetPremium);
+                    
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#underlying-@groupIndex">
+                                <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                                    <div>
+                                        <strong class="fs-5">@underlying</strong>
+                                        <span class="badge bg-secondary ms-2">@strategies.Count strategies</span>
+                                    </div>
+                                    <div>
+                                        <span class="@(underlyingNetPremium >= 0 ? "text-success" : "text-danger") fw-bold">
+                                            @(underlyingNetPremium >= 0 ? "+" : "")@underlyingNetPremium.ToString("C2")
+                                        </span>
+                                    </div>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="underlying-@groupIndex" class="accordion-collapse collapse">
+                            <div class="accordion-body p-0">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Strategy</th>
+                                            <th>Expiration</th>
+                                            <th>Trade Date</th>
+                                            <th class="text-center">Legs</th>
+                                            <th class="text-center">Status</th>
+                                            <th class="text-end">Net Premium</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var strategy in strategies.OrderByDescending(s => s.TradeDate))
+                                        {
+                                            var daysToExpiry = strategy.ExpirationDate.HasValue 
+                                                ? (strategy.ExpirationDate.Value - DateTime.Now).Days 
+                                                : (int?)null;
+                                            var expiryClass = daysToExpiry.HasValue && daysToExpiry <= 7 ? "text-danger fw-bold" 
+                                                : daysToExpiry.HasValue && daysToExpiry <= 14 ? "text-warning" 
+                                                : "";
+                                            
+                                            <tr>
+                                                <td>
+                                                    <span class="badge @GetStrategyBadgeClass(strategy.SpreadType)">
+                                                        @strategy.StrategyName
+                                                    </span>
+                                                    @if (strategy.Legs.Any())
+                                                    {
+                                                        var strikes = strategy.Legs.Select(l => l.StrikePrice).Distinct().OrderBy(s => s);
+                                                        <small class="text-muted ms-1">
+                                                            $@string.Join(" / $", strikes.Select(s => s.ToString("N0")))
+                                                        </small>
+                                                    }
+                                                </td>
+                                                <td class="@expiryClass">
+                                                    @if (strategy.ExpirationDate.HasValue)
+                                                    {
+                                                        @strategy.ExpirationDate.Value.ToString("MMM dd, yyyy")
+                                                        @if (daysToExpiry.HasValue)
+                                                        {
+                                                            <small class="text-muted">(@daysToExpiry days)</small>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">-</span>
+                                                    }
+                                                </td>
+                                                <td>@strategy.TradeDate.ToString("MMM dd, yyyy")</td>
+                                                <td class="text-center">
+                                                    <span class="badge bg-secondary">@strategy.LegCount</span>
+                                                </td>
+                                                <td class="text-center">
+                                                    @if (strategy.IsOpen)
+                                                    {
+                                                        <span class="badge bg-success">OPEN</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary">CLOSED</span>
+                                                    }
+                                                </td>
+                                                <td class="text-end @(strategy.NetPremium >= 0 ? "text-success" : "text-danger") fw-bold">
+                                                    @(strategy.NetPremium >= 0 ? "+" : "")@strategy.NetPremium.ToString("C2")
+                                                </td>
+                                            </tr>
+                                            <!-- Leg details row (collapsible) -->
+                                            @if (strategy.Legs.Count > 1)
+                                            {
+                                                <tr class="table-secondary">
+                                                    <td colspan="6" class="py-1 ps-4">
+                                                        <small>
+                                                            @foreach (var leg in strategy.Legs.OrderBy(l => l.LegNumber))
+                                                            {
+                                                                var isSell = leg.Action.Contains("SELL");
+                                                                <span class="me-3">
+                                                                    <span class="badge @(isSell ? "bg-success" : "bg-danger") badge-sm">
+                                                                        @(isSell ? "SELL" : "BUY")
+                                                                    </span>
+                                                                    @leg.Quantity×
+                                                                    $@leg.StrikePrice.ToString("N0")
+                                                                    <span class="badge @(leg.OptionType == "Call" ? "bg-primary" : "bg-warning text-dark") badge-sm">
+                                                                        @leg.OptionType
+                                                                    </span>
+                                                                    @@ @leg.Price.ToString("C2")
+                                                                </span>
+                                                            }
+                                                        </small>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    groupIndex++;
+                }
+            </div>
+        </div>
     </div>
 }
 

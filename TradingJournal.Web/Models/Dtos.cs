@@ -155,6 +155,49 @@ public class PortfolioWithQuoteDto
     public DateTime LastUpdated { get; set; }
     public string? AccountId { get; set; }
     public string? AccountName { get; set; }
+    
+    // Options fields
+    public string InstrumentType { get; set; } = "Stock";
+    public string? OptionType { get; set; }
+    public double? StrikePrice { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? UnderlyingSymbol { get; set; }
+    public string? SpreadType { get; set; }
+    public string? SpreadGroupId { get; set; }
+    public int? SpreadLegNumber { get; set; }
+}
+
+/// <summary>
+/// Open options position grouped by spread strategy
+/// </summary>
+public class OptionSpreadGroupDto
+{
+    public string SpreadGroupId { get; set; } = string.Empty;
+    public string SpreadType { get; set; } = string.Empty;
+    public string StrategyName { get; set; } = string.Empty;
+    public string UnderlyingSymbol { get; set; } = string.Empty;
+    public DateTime? ExpirationDate { get; set; }
+    public DateTime TradeDate { get; set; }
+    public double NetPremium { get; set; }
+    public int LegCount { get; set; }
+    public bool IsOpen { get; set; }
+    public string? AccountId { get; set; }
+    public string? AccountName { get; set; }
+    public List<OptionLegDto> Legs { get; set; } = new();
+}
+
+public class OptionLegDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Symbol { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty;
+    public string OptionType { get; set; } = string.Empty;
+    public double StrikePrice { get; set; }
+    public double Quantity { get; set; }
+    public double Price { get; set; }
+    public double Premium { get; set; }
+    public int LegNumber { get; set; }
+    public DateTime? ExpirationDate { get; set; }
 }
 
 public class CreateAccountDto

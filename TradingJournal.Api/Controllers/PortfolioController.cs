@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
+using TradingJournal.Api.Data;
 using TradingJournal.Api.Models;
 using TradingJournal.Api.Services;
 
@@ -13,11 +16,13 @@ public class PortfolioController : ControllerBase
 {
     private readonly IPortfolioService _portfolioService;
     private readonly IStockQuoteService _stockQuoteService;
+    private readonly ApplicationDbContext _context;
 
-    public PortfolioController(IPortfolioService portfolioService, IStockQuoteService stockQuoteService)
+    public PortfolioController(IPortfolioService portfolioService, IStockQuoteService stockQuoteService, ApplicationDbContext context)
     {
         _portfolioService = portfolioService;
         _stockQuoteService = stockQuoteService;
+        _context = context;
     }
 
     [HttpGet]
@@ -114,6 +119,139 @@ public class PortfolioController : ControllerBase
         await _portfolioService.RecalculateAllAsync(userId);
         return Ok(new { message = "Portfolio recalculated successfully" });
     }
+
+    /// <summary>
+    /// Get open options positions grouped by spread strategy
+    /// </summary>
+    [HttpGet("options")]
+    public async Task<ActionResult<IEnumerable<OptionSpreadGroup>>> GetOptionsPositions([FromQuery] string? accountId = null)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        // Get all options trades
+        var query = _context.Trades
+            .Include(t => t.Account)
+            .Where(t => t.UserId == userId && t.InstrumentType == InstrumentType.Option);
+
+        if (!string.IsNullOrEmpty(accountId))
+        {
+            query = query.Where(t => t.AccountId == accountId);
+        }
+
+        var optionTrades = await query.OrderByDescending(t => t.Date).ToListAsync();
+
+        // Group by SpreadGroupId to identify spreads
+        var spreadGroups = optionTrades
+            .Where(t => !string.IsNullOrEmpty(t.SpreadGroupId))
+            .GroupBy(t => t.SpreadGroupId!)
+            .Select(g =>
+            {
+                var legs = g.OrderBy(t => t.SpreadLegNumber ?? 0).ToList();
+                var firstLeg = legs.First();
+                
+                // Extract strategy name from notes if available
+                var strategyName = ExtractStrategyName(firstLeg.Notes, firstLeg.SpreadType.ToString());
+                
+                // Calculate net premium (positive = credit, negative = debit)
+                var netPremium = legs.Sum(t =>
+                {
+                    var premium = t.Price * t.Quantity * t.ContractMultiplier;
+                    // SELL trades are credits (positive), BUY trades are debits (negative)
+                    return t.Type.Contains("SELL") ? premium : -premium;
+                });
+
+                return new OptionSpreadGroup
+                {
+                    SpreadGroupId = g.Key,
+                    SpreadType = firstLeg.SpreadType.ToString(),
+                    StrategyName = strategyName,
+                    UnderlyingSymbol = firstLeg.UnderlyingSymbol ?? firstLeg.Symbol,
+                    ExpirationDate = legs.Max(t => t.ExpirationDate),
+                    TradeDate = firstLeg.Date,
+                    NetPremium = netPremium,
+                    LegCount = legs.Count,
+                    IsOpen = firstLeg.IsOpeningTrade ?? true,
+                    AccountId = firstLeg.AccountId,
+                    AccountName = firstLeg.Account?.Name,
+                    Legs = legs.Select(t => new OptionLeg
+                    {
+                        Id = t.Id,
+                        Symbol = t.Symbol,
+                        Action = t.Type,
+                        OptionType = t.OptionType?.ToString() ?? "",
+                        StrikePrice = t.StrikePrice ?? 0,
+                        Quantity = t.Quantity,
+                        Price = t.Price,
+                        Premium = t.Price * t.Quantity * t.ContractMultiplier * (t.Type.Contains("SELL") ? 1 : -1),
+                        LegNumber = t.SpreadLegNumber ?? 0,
+                        ExpirationDate = t.ExpirationDate
+                    }).ToList()
+                };
+            })
+            .OrderByDescending(g => g.TradeDate)
+            .ToList();
+
+        // Also include single-leg options that aren't part of a spread
+        var singleOptions = optionTrades
+            .Where(t => string.IsNullOrEmpty(t.SpreadGroupId) || t.SpreadType == SpreadType.Single)
+            .Select(t => new OptionSpreadGroup
+            {
+                SpreadGroupId = t.Id, // Use trade ID as group ID
+                SpreadType = "Single",
+                StrategyName = $"Single {t.OptionType}",
+                UnderlyingSymbol = t.UnderlyingSymbol ?? t.Symbol,
+                ExpirationDate = t.ExpirationDate,
+                TradeDate = t.Date,
+                NetPremium = t.Price * t.Quantity * t.ContractMultiplier * (t.Type.Contains("SELL") ? 1 : -1),
+                LegCount = 1,
+                IsOpen = t.IsOpeningTrade ?? true,
+                AccountId = t.AccountId,
+                AccountName = t.Account?.Name,
+                Legs = new List<OptionLeg>
+                {
+                    new OptionLeg
+                    {
+                        Id = t.Id,
+                        Symbol = t.Symbol,
+                        Action = t.Type,
+                        OptionType = t.OptionType?.ToString() ?? "",
+                        StrikePrice = t.StrikePrice ?? 0,
+                        Quantity = t.Quantity,
+                        Price = t.Price,
+                        Premium = t.Price * t.Quantity * t.ContractMultiplier * (t.Type.Contains("SELL") ? 1 : -1),
+                        LegNumber = 1,
+                        ExpirationDate = t.ExpirationDate
+                    }
+                }
+            })
+            .ToList();
+
+        // Combine and sort by date
+        var allGroups = spreadGroups.Concat(singleOptions)
+            .OrderByDescending(g => g.TradeDate)
+            .ToList();
+
+        return Ok(allGroups);
+    }
+
+    private static string ExtractStrategyName(string? notes, string fallbackType)
+    {
+        if (string.IsNullOrEmpty(notes))
+            return fallbackType;
+        
+        // Try to extract strategy name from notes (e.g., "Credit Call Spread ($588.66)")
+        var match = Regex.Match(notes, @"^([^(]+)");
+        if (match.Success)
+        {
+            return match.Groups[1].Value.Trim();
+        }
+        
+        return fallbackType;
+    }
 }
 
 public class PortfolioWithQuote
@@ -136,4 +274,47 @@ public class PortfolioWithQuote
     public DateTime LastUpdated { get; set; }
     public string? AccountId { get; set; }
     public string? AccountName { get; set; }
+    
+    // Options fields
+    public string InstrumentType { get; set; } = "Stock";
+    public string? OptionType { get; set; }
+    public double? StrikePrice { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? UnderlyingSymbol { get; set; }
+    public string? SpreadType { get; set; }
+    public string? SpreadGroupId { get; set; }
+    public int? SpreadLegNumber { get; set; }
+}
+
+/// <summary>
+/// Open options position grouped by spread strategy
+/// </summary>
+public class OptionSpreadGroup
+{
+    public string SpreadGroupId { get; set; } = string.Empty;
+    public string SpreadType { get; set; } = string.Empty;
+    public string StrategyName { get; set; } = string.Empty;
+    public string UnderlyingSymbol { get; set; } = string.Empty;
+    public DateTime? ExpirationDate { get; set; }
+    public DateTime TradeDate { get; set; }
+    public double NetPremium { get; set; }
+    public int LegCount { get; set; }
+    public bool IsOpen { get; set; }
+    public string? AccountId { get; set; }
+    public string? AccountName { get; set; }
+    public List<OptionLeg> Legs { get; set; } = new();
+}
+
+public class OptionLeg
+{
+    public string Id { get; set; } = string.Empty;
+    public string Symbol { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty;
+    public string OptionType { get; set; } = string.Empty;
+    public double StrikePrice { get; set; }
+    public double Quantity { get; set; }
+    public double Price { get; set; }
+    public double Premium { get; set; }
+    public int LegNumber { get; set; }
+    public DateTime? ExpirationDate { get; set; }
 }

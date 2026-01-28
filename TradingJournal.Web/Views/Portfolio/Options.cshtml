@@ -116,62 +116,73 @@
     </div>
 }
 
-<!-- Options by Underlying -->
+<!-- Options by Open Date -->
 @if (Model.Any())
 {
     <div class="card">
         <div class="card-header bg-warning text-dark">
-            <h5 class="mb-0"><i class="bi bi-collection"></i> Strategies by Underlying</h5>
+            <h5 class="mb-0"><i class="bi bi-calendar3"></i> Strategies by Open Date</h5>
         </div>
         <div class="card-body p-0">
             <div class="accordion" id="optionsAccordion">
                 @{
                     var groupIndex = 0;
-                    var groupedByUnderlying = Model.GroupBy(g => g.UnderlyingSymbol).OrderBy(g => g.Key);
+                    var groupedByDate = Model
+                        .GroupBy(g => g.TradeDate.Date)
+                        .OrderByDescending(g => g.Key);
                 }
-                @foreach (var underlyingGroup in groupedByUnderlying)
+                @foreach (var dateGroup in groupedByDate)
                 {
-                    var underlying = underlyingGroup.Key;
-                    var strategies = underlyingGroup.ToList();
-                    var underlyingNetPremium = strategies.Sum(s => s.NetPremium);
-                    var underlyingOpen = strategies.Count(s => s.IsOpen);
+                    var tradeDate = dateGroup.Key;
+                    var strategies = dateGroup.ToList();
+                    var dateNetPremium = strategies.Sum(s => s.NetPremium);
+                    var dateOpen = strategies.Count(s => s.IsOpen);
+                    var dateClosed = strategies.Count(s => !s.IsOpen);
+                    var isToday = tradeDate.Date == DateTime.Today;
+                    var isYesterday = tradeDate.Date == DateTime.Today.AddDays(-1);
+                    var dateLabel = isToday ? "Today" : isYesterday ? "Yesterday" : tradeDate.ToString("dddd, MMM dd, yyyy");
                     
                     <div class="accordion-item">
                         <h2 class="accordion-header">
-                            <button class="accordion-button @(groupIndex > 0 ? "collapsed" : "")" type="button" data-bs-toggle="collapse" data-bs-target="#underlying-@groupIndex">
+                            <button class="accordion-button @(groupIndex > 0 ? "collapsed" : "")" type="button" data-bs-toggle="collapse" data-bs-target="#date-@groupIndex">
                                 <div class="d-flex justify-content-between align-items-center w-100 me-3">
                                     <div>
-                                        <strong class="fs-5">@underlying</strong>
+                                        <i class="bi bi-calendar-event me-2 text-primary"></i>
+                                        <strong class="fs-5">@dateLabel</strong>
                                         <span class="badge bg-secondary ms-2">@strategies.Count strategies</span>
-                                        @if (underlyingOpen > 0)
+                                        @if (dateOpen > 0)
                                         {
-                                            <span class="badge bg-success ms-1">@underlyingOpen open</span>
+                                            <span class="badge bg-success ms-1">@dateOpen open</span>
+                                        }
+                                        @if (dateClosed > 0)
+                                        {
+                                            <span class="badge bg-secondary ms-1">@dateClosed closed</span>
                                         }
                                     </div>
                                     <div>
-                                        <span class="@(underlyingNetPremium >= 0 ? "text-success" : "text-danger") fw-bold fs-5">
-                                            @(underlyingNetPremium >= 0 ? "+" : "")@underlyingNetPremium.ToString("C2")
+                                        <span class="@(dateNetPremium >= 0 ? "text-success" : "text-danger") fw-bold fs-5">
+                                            @(dateNetPremium >= 0 ? "+" : "")@dateNetPremium.ToString("C2")
                                         </span>
                                     </div>
                                 </div>
                             </button>
                         </h2>
-                        <div id="underlying-@groupIndex" class="accordion-collapse collapse @(groupIndex == 0 ? "show" : "")">
+                        <div id="date-@groupIndex" class="accordion-collapse collapse @(groupIndex == 0 ? "show" : "")">
                             <div class="accordion-body p-0">
                                 <table class="table table-sm table-hover mb-0">
                                     <thead class="table-light">
                                         <tr>
+                                            <th>Underlying</th>
                                             <th>Strategy</th>
                                             <th>Strikes</th>
                                             <th>Expiration</th>
-                                            <th>Trade Date</th>
                                             <th class="text-center">Legs</th>
                                             <th class="text-center">Status</th>
                                             <th class="text-end">Net Premium</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach (var strategy in strategies.OrderByDescending(s => s.TradeDate))
+                                        @foreach (var strategy in strategies.OrderBy(s => s.UnderlyingSymbol))
                                         {
                                             var daysToExpiry = strategy.ExpirationDate.HasValue 
                                                 ? (strategy.ExpirationDate.Value - DateTime.Now).Days 
@@ -182,6 +193,9 @@
                                             var strikes = strategy.Legs.Select(l => l.StrikePrice).Distinct().OrderBy(s => s).ToList();
                                             
                                             <tr>
+                                                <td>
+                                                    <strong class="text-primary">@strategy.UnderlyingSymbol</strong>
+                                                </td>
                                                 <td>
                                                     <span class="badge @GetStrategyBadgeClass(strategy.SpreadType)">
                                                         @strategy.StrategyName
@@ -209,7 +223,6 @@
                                                         <span class="text-muted">-</span>
                                                     }
                                                 </td>
-                                                <td>@strategy.TradeDate.ToString("MMM dd")</td>
                                                 <td class="text-center">
                                                     <span class="badge bg-secondary">@strategy.LegCount</span>
                                                 </td>
@@ -259,9 +272,9 @@
                                     </tbody>
                                     <tfoot class="table-dark">
                                         <tr>
-                                            <td colspan="6" class="text-end"><strong>@underlying Total:</strong></td>
-                                            <td class="text-end @(underlyingNetPremium >= 0 ? "text-success" : "text-danger") fw-bold">
-                                                @(underlyingNetPremium >= 0 ? "+" : "")@underlyingNetPremium.ToString("C2")
+                                            <td colspan="6" class="text-end"><strong>@dateLabel Total:</strong></td>
+                                            <td class="text-end @(dateNetPremium >= 0 ? "text-success" : "text-danger") fw-bold">
+                                                @(dateNetPremium >= 0 ? "+" : "")@dateNetPremium.ToString("C2")
                                             </td>
                                         </tr>
                                     </tfoot>

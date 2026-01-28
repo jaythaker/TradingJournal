@@ -1,0 +1,171 @@
+---
+description: TradingJournal CSV import functionality - parsing Fidelity and generic CSV files
+globs: ["TradingJournal.Api/Services/Import/**"]
+---
+
+# TradingJournal Import System Guide
+
+You are working on the CSV import functionality for trade and dividend data.
+
+## Import Architecture
+
+```
+TradingJournal.Api/Services/Import/
+├── ITradeImporter.cs      # Interface for all importers
+├── ImportService.cs       # Orchestrates import process
+├── FidelityImporter.cs    # Fidelity-specific CSV parser
+└── GenericCsvImporter.cs  # Generic CSV parser
+```
+
+## ITradeImporter Interface
+
+```csharp
+public interface ITradeImporter
+{
+    string FormatName { get; }
+    string FormatDescription { get; }
+    Task<ImportResult> ImportAsync(Stream csvStream, string userId, string accountId);
+    bool CanParse(string[] headers);
+}
+
+public class ImportResult
+{
+    public bool Success { get; set; }
+    public int ImportedCount { get; set; }
+    public int DividendsImportedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public int ErrorCount { get; set; }
+    public List<string> Errors { get; set; }
+    public List<ImportedTradeDto> ImportedTrades { get; set; }
+}
+```
+
+## Fidelity CSV Format
+
+### Headers
+```
+Run Date,Action,Symbol,Security Description,Security Type,Quantity,Price ($),Commission ($),Fees ($),Accrued Interest ($),Amount ($),Settlement Date
+```
+
+### Trade Actions
+- `YOU BOUGHT` / `YOU SOLD` - Stock trades
+- `YOU BOUGHT OPENING` / `SOLD TO OPEN` - Options opening
+- `BOUGHT TO CLOSE` / `YOU SOLD CLOSING` - Options closing
+- `DIVIDEND RECEIVED` - Cash dividends
+- `REINVESTMENT` - Dividend reinvestment
+
+### Options Symbol Format (OCC)
+```
+-AAPL250117C00150000
+ │    │     │  │
+ │    │     │  └── Strike price * 1000 (8 digits) = $150.00
+ │    │     └── C=Call, P=Put
+ │    └── YYMMDD expiration = Jan 17, 2025
+ └── Underlying symbol
+```
+
+## Parsing Options
+
+```csharp
+// Regex for OCC option symbol
+private static readonly Regex OptionSymbolRegex = new Regex(
+    @"^-?([A-Z]+)(\d{6})([CP])(\d{8})$",
+    RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+// Parse option symbol
+var match = OptionSymbolRegex.Match(symbol);
+if (match.Success)
+{
+    var underlying = match.Groups[1].Value;      // "AAPL"
+    var dateStr = match.Groups[2].Value;         // "250117"
+    var typeChar = match.Groups[3].Value;        // "C" or "P"
+    var strikeRaw = match.Groups[4].Value;       // "00150000"
+    
+    var expiration = DateTime.ParseExact(dateStr, "yyMMdd", ...);
+    var optionType = typeChar == "C" ? OptionType.Call : OptionType.Put;
+    var strike = double.Parse(strikeRaw) / 1000.0;  // 150.00
+}
+```
+
+## Spread Detection
+
+After importing, analyze trades to detect spreads:
+
+```csharp
+private SpreadType AnalyzeSpreadType(List<Trade> trades)
+{
+    // Group by same day, same underlying, same expiration
+    // Count buys/sells, calls/puts
+    
+    // 2 legs, same type, 1 buy + 1 sell = Vertical spread
+    if (trades.Count == 2 && buyCount == 1 && sellCount == 1)
+    {
+        return netPremium > 0 ? SpreadType.CreditSpread : SpreadType.DebitSpread;
+    }
+    
+    // 4 legs, 2 calls + 2 puts = Iron Condor
+    // Same strike call + put = Straddle
+    // Different strike call + put = Strangle
+}
+```
+
+## Spread Types
+
+| Type | Legs | Description |
+|------|------|-------------|
+| Single | 1 | Single option trade |
+| CreditSpread | 2 | Sell higher premium, buy lower (receive credit) |
+| DebitSpread | 2 | Buy higher premium, sell lower (pay debit) |
+| IronCondor | 4 | 2 call spread + 2 put spread |
+| Straddle | 2 | Same strike call + put |
+| Strangle | 2 | Different strike call + put |
+| Butterfly | 3 | 3-leg strategy |
+| Calendar | 2 | Same strike, different expiration |
+
+## Duplicate Detection
+
+```csharp
+private async Task<bool> IsDuplicateTradeAsync(...)
+{
+    return await _context.Trades.AnyAsync(t =>
+        t.UserId == userId &&
+        t.AccountId == accountId &&
+        t.Symbol == symbol &&
+        t.Date.Date == date.Date &&
+        t.Type == type &&
+        Math.Abs(t.Quantity - quantity) < 0.001 &&
+        Math.Abs(t.Price - price) < 0.001
+    );
+}
+```
+
+## CSV Parsing Helper
+
+```csharp
+private static string[] ParseCsvLine(string line)
+{
+    var result = new List<string>();
+    var current = new StringBuilder();
+    bool inQuotes = false;
+    
+    foreach (char c in line)
+    {
+        if (c == '"') inQuotes = !inQuotes;
+        else if (c == ',' && !inQuotes)
+        {
+            result.Add(current.ToString().Trim());
+            current.Clear();
+        }
+        else current.Append(c);
+    }
+    result.Add(current.ToString().Trim());
+    return result.ToArray();
+}
+```
+
+## Adding New Importer
+
+1. Create `NewBrokerImporter.cs` implementing `ITradeImporter`
+2. Register in `ImportService.cs` constructor
+3. Implement `CanParse()` to detect CSV format
+4. Implement `ImportAsync()` to parse and save trades

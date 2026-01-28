@@ -1,0 +1,171 @@
+---
+description: TradingJournal Web MVC development - ASP.NET Core MVC with Razor views
+globs: ["TradingJournal.Web/**/*.cs", "TradingJournal.Web/**/*.cshtml", "TradingJournal.Web/wwwroot/**"]
+---
+
+# TradingJournal Web Development Guide
+
+You are working on the TradingJournal Web application, an ASP.NET Core MVC frontend.
+
+## Tech Stack
+
+- **Framework:** ASP.NET Core 10.0 MVC
+- **View Engine:** Razor Views (.cshtml)
+- **UI Framework:** Bootstrap 5
+- **JavaScript:** jQuery, jQuery Validation, Chart.js
+- **Authentication:** Cookie-based with JWT token storage in session
+- **API Communication:** HttpClient via ApiClient service
+
+## Project Structure
+
+```
+TradingJournal.Web/
+├── Controllers/         # MVC controllers
+├── Views/               # Razor views organized by feature
+│   ├── Shared/          # _Layout.cshtml, partials
+│   ├── Dashboard/       # Dashboard views
+│   ├── Trades/          # Trade management views
+│   ├── Portfolio/       # Portfolio views
+│   └── ...
+├── Models/              # DTOs and ViewModels
+├── Services/            # ApiClient for API communication
+├── wwwroot/
+│   ├── css/site.css     # Custom styles (light theme)
+│   ├── js/site.js       # Custom JavaScript
+│   └── lib/             # Bootstrap, jQuery, Chart.js
+└── Program.cs
+```
+
+## Coding Conventions
+
+### Controllers
+```csharp
+public class TradesController : Controller
+{
+    private readonly ApiClient _apiClient;
+    
+    public async Task<IActionResult> Index(string? accountId, DateTime? startDate, DateTime? endDate)
+    {
+        // Set default dates
+        if (!startDate.HasValue && !endDate.HasValue)
+        {
+            startDate = new DateTime(DateTime.Today.Year, 1, 1);
+            endDate = DateTime.Today;
+        }
+        
+        // Call API
+        var response = await _apiClient.GetAsync<List<TradeDto>>(endpoint);
+        
+        // Pass data to view
+        ViewBag.StartDate = startDate;
+        return View(response);
+    }
+}
+```
+
+### Views (Razor)
+```html
+@model List<TradeDto>
+@{
+    ViewData["Title"] = "Trades";
+    var startDate = ViewBag.StartDate as DateTime?;
+}
+
+<h1><i class="bi bi-arrow-left-right"></i> Trades</h1>
+
+<!-- Filter Card -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get">
+            <input type="date" name="startDate" value="@startDate?.ToString("yyyy-MM-dd")" />
+            <button type="submit" class="btn btn-primary">Apply</button>
+        </form>
+    </div>
+</div>
+```
+
+### DTOs (in Models/Dtos.cs)
+```csharp
+public class TradeDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Symbol { get; set; } = string.Empty;
+    // ... all properties matching API response
+}
+```
+
+## UI Theme
+
+The app uses a **clean light theme** with:
+- White backgrounds (`#f8f9fa`, `#ffffff`)
+- Dark text (`#212529`, `#495057`)
+- Bootstrap 5 default colors for accents
+- Cards with subtle shadows
+- Bootstrap Icons (`bi-*`) for icons
+
+### CSS Variables (site.css)
+```css
+:root {
+    --bg-primary: #f8f9fa;
+    --bg-card: #ffffff;
+    --text-primary: #212529;
+    --accent-primary: #0d6efd;
+    --accent-success: #198754;
+    --accent-danger: #dc3545;
+}
+```
+
+## ApiClient Usage
+
+```csharp
+// GET request
+var trades = await _apiClient.GetAsync<List<TradeDto>>("/api/trades");
+
+// POST request
+var result = await _apiClient.PostAsync<ImportResult, FormData>("/api/import/trades", formData);
+```
+
+## Chart.js Integration
+
+```javascript
+// In Razor view @section Scripts
+const chartColors = {
+    primary: '#0d6efd',
+    success: '#198754',
+    danger: '#dc3545',
+    text: '#212529',
+    grid: '#dee2e6'
+};
+
+new Chart(ctx, {
+    type: 'line',
+    data: { /* ... */ },
+    options: {
+        plugins: {
+            tooltip: {
+                backgroundColor: '#ffffff',
+                titleColor: chartColors.text
+            }
+        }
+    }
+});
+```
+
+## Layout (_Layout.cshtml)
+
+- Navbar: `navbar-light` with white background
+- Bootstrap Icons loaded from CDN
+- Chart.js loaded for dashboard pages
+- Session-based authentication check
+
+## Commands
+
+```bash
+# Run Web app
+cd TradingJournal.Web
+dotnet run
+
+# Default URLs
+# Web: http://localhost:5026
+# API: http://localhost:5122 (must be running)
+```

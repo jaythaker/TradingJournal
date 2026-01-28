@@ -120,7 +120,7 @@ public class TimeAnalysisSummary
 public class CreateTradeRequest
 {
     public string Symbol { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty; // BUY, SELL
+    public string Type { get; set; } = string.Empty; // BUY, SELL, BUY_TO_OPEN, SELL_TO_OPEN, BUY_TO_CLOSE, SELL_TO_CLOSE
     public double Quantity { get; set; }
     public double Price { get; set; }
     public double Fee { get; set; } = 0;
@@ -128,6 +128,18 @@ public class CreateTradeRequest
     public DateTime Date { get; set; }
     public string? Notes { get; set; }
     public string AccountId { get; set; } = string.Empty;
+    
+    // Options fields
+    public string InstrumentType { get; set; } = "Stock"; // Stock, Option
+    public string? OptionType { get; set; } // Call, Put
+    public double? StrikePrice { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? UnderlyingSymbol { get; set; }
+    public int ContractMultiplier { get; set; } = 100;
+    public string SpreadType { get; set; } = "Single"; // Single, CreditSpread, DebitSpread, etc.
+    public string? SpreadGroupId { get; set; }
+    public int? SpreadLegNumber { get; set; }
+    public bool? IsOpeningTrade { get; set; }
 }
 
 public class UpdateTradeRequest
@@ -141,4 +153,16 @@ public class UpdateTradeRequest
     public DateTime? Date { get; set; }
     public string? Notes { get; set; }
     public string? AccountId { get; set; }
+    
+    // Options fields
+    public string? InstrumentType { get; set; }
+    public string? OptionType { get; set; }
+    public double? StrikePrice { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? UnderlyingSymbol { get; set; }
+    public int? ContractMultiplier { get; set; }
+    public string? SpreadType { get; set; }
+    public string? SpreadGroupId { get; set; }
+    public int? SpreadLegNumber { get; set; }
+    public bool? IsOpeningTrade { get; set; }
 }

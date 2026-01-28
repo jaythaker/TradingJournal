@@ -19,6 +19,25 @@ public class TradeDto
     public DateTime Date { get; set; }
     public string? Notes { get; set; }
     public string AccountId { get; set; } = string.Empty;
+    
+    // Options fields
+    public string InstrumentType { get; set; } = "Stock";
+    public string? OptionType { get; set; }
+    public double? StrikePrice { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? UnderlyingSymbol { get; set; }
+    public int ContractMultiplier { get; set; } = 100;
+    public string SpreadType { get; set; } = "Single";
+    public string? SpreadGroupId { get; set; }
+    public int? SpreadLegNumber { get; set; }
+    public bool? IsOpeningTrade { get; set; }
+    
+    // Computed properties for display
+    public bool IsOption => InstrumentType == "Option";
+    public double NotionalValue => IsOption ? Price * Quantity * ContractMultiplier : Price * Quantity;
+    public string OptionDescription => IsOption && StrikePrice.HasValue && ExpirationDate.HasValue
+        ? $"{UnderlyingSymbol ?? Symbol} {StrikePrice:F0}{(OptionType == "Call" ? "C" : "P")} {ExpirationDate:MM/dd/yyyy}"
+        : Symbol;
 }
 
 public class PortfolioDto
@@ -155,6 +174,18 @@ public class CreateTradeDto
     public DateTime Date { get; set; } = DateTime.Now;
     public string? Notes { get; set; }
     public string AccountId { get; set; } = string.Empty;
+    
+    // Options fields
+    public string InstrumentType { get; set; } = "Stock";
+    public string? OptionType { get; set; }
+    public double? StrikePrice { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? UnderlyingSymbol { get; set; }
+    public int ContractMultiplier { get; set; } = 100;
+    public string SpreadType { get; set; } = "Single";
+    public string? SpreadGroupId { get; set; }
+    public int? SpreadLegNumber { get; set; }
+    public bool? IsOpeningTrade { get; set; }
 }
 
 // Dashboard DTOs

@@ -74,14 +74,28 @@ public class TradeService : ITradeService
             AccountId = request.AccountId,
             UserId = userId,
             CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            UpdatedAt = DateTime.UtcNow,
+            // Options fields
+            InstrumentType = Enum.TryParse<InstrumentType>(request.InstrumentType, true, out var instType) ? instType : InstrumentType.Stock,
+            OptionType = Enum.TryParse<OptionType>(request.OptionType, true, out var optType) ? optType : null,
+            StrikePrice = request.StrikePrice,
+            ExpirationDate = request.ExpirationDate,
+            UnderlyingSymbol = request.UnderlyingSymbol,
+            ContractMultiplier = request.ContractMultiplier,
+            SpreadType = Enum.TryParse<SpreadType>(request.SpreadType, true, out var spreadType) ? spreadType : SpreadType.Single,
+            SpreadGroupId = request.SpreadGroupId,
+            SpreadLegNumber = request.SpreadLegNumber,
+            IsOpeningTrade = request.IsOpeningTrade
         };
 
         _context.Trades.Add(trade);
         await _context.SaveChangesAsync();
 
-        // Update portfolio
-        await _portfolioService.UpdatePortfolioAsync(userId, request.AccountId, request.Symbol);
+        // Update portfolio (only for stocks, not options for now)
+        if (trade.InstrumentType == InstrumentType.Stock)
+        {
+            await _portfolioService.UpdatePortfolioAsync(userId, request.AccountId, request.Symbol);
+        }
 
         return trade;
     }
@@ -115,19 +129,44 @@ public class TradeService : ITradeService
             trade.Notes = request.Notes;
         if (!string.IsNullOrEmpty(request.AccountId))
             trade.AccountId = request.AccountId;
+        
+        // Options fields
+        if (!string.IsNullOrEmpty(request.InstrumentType) && Enum.TryParse<InstrumentType>(request.InstrumentType, true, out var instType))
+            trade.InstrumentType = instType;
+        if (!string.IsNullOrEmpty(request.OptionType) && Enum.TryParse<OptionType>(request.OptionType, true, out var optType))
+            trade.OptionType = optType;
+        if (request.StrikePrice.HasValue)
+            trade.StrikePrice = request.StrikePrice.Value;
+        if (request.ExpirationDate.HasValue)
+            trade.ExpirationDate = request.ExpirationDate.Value;
+        if (request.UnderlyingSymbol != null)
+            trade.UnderlyingSymbol = request.UnderlyingSymbol;
+        if (request.ContractMultiplier.HasValue)
+            trade.ContractMultiplier = request.ContractMultiplier.Value;
+        if (!string.IsNullOrEmpty(request.SpreadType) && Enum.TryParse<SpreadType>(request.SpreadType, true, out var spreadType))
+            trade.SpreadType = spreadType;
+        if (request.SpreadGroupId != null)
+            trade.SpreadGroupId = request.SpreadGroupId;
+        if (request.SpreadLegNumber.HasValue)
+            trade.SpreadLegNumber = request.SpreadLegNumber.Value;
+        if (request.IsOpeningTrade.HasValue)
+            trade.IsOpeningTrade = request.IsOpeningTrade.Value;
 
         trade.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        // Update portfolio if symbol or account changed
-        if (request.Symbol != null || request.AccountId != null)
+        // Update portfolio if symbol or account changed (only for stocks)
+        if (trade.InstrumentType == InstrumentType.Stock)
         {
-            await _portfolioService.UpdatePortfolioAsync(userId, oldAccountId, oldSymbol);
-            await _portfolioService.UpdatePortfolioAsync(userId, trade.AccountId, trade.Symbol);
-        }
-        else
-        {
-            await _portfolioService.UpdatePortfolioAsync(userId, trade.AccountId, trade.Symbol);
+            if (request.Symbol != null || request.AccountId != null)
+            {
+                await _portfolioService.UpdatePortfolioAsync(userId, oldAccountId, oldSymbol);
+                await _portfolioService.UpdatePortfolioAsync(userId, trade.AccountId, trade.Symbol);
+            }
+            else
+            {
+                await _portfolioService.UpdatePortfolioAsync(userId, trade.AccountId, trade.Symbol);
+            }
         }
 
         return trade;

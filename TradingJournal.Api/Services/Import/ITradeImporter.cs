@@ -28,4 +28,15 @@ public class ImportedTradeDto
     public double Fee { get; set; }
     public DateTime Date { get; set; }
     public string? Notes { get; set; }
+    
+    // Options fields
+    public string InstrumentType { get; set; } = "Stock";
+    public string? OptionType { get; set; }
+    public double? StrikePrice { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? UnderlyingSymbol { get; set; }
+    public string SpreadType { get; set; } = "Single";
+    public string? SpreadGroupId { get; set; }
+    public int? SpreadLegNumber { get; set; }
+    public bool? IsOpeningTrade { get; set; }
 }

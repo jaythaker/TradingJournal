@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using TradingJournal.Api.Data;
 using TradingJournal.Api.Models;
@@ -8,6 +9,13 @@ namespace TradingJournal.Api.Services.Import;
 public class FidelityImporter : ITradeImporter
 {
     private readonly ApplicationDbContext _context;
+    
+    // Regex to parse OCC option symbol format: SYMBOL + YYMMDD + C/P + Strike*1000 (8 digits)
+    // Example: AAPL250117C00150000 = AAPL Jan 17, 2025 $150 Call
+    // Or with dash: -AAPL250117C00150000
+    private static readonly Regex OptionSymbolRegex = new Regex(
+        @"^-?([A-Z]+)(\d{6})([CP])(\d{8})$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public FidelityImporter(ApplicationDbContext context)
     {
@@ -26,6 +34,65 @@ public class FidelityImporter : ITradeImporter
             Math.Abs(t.Quantity - quantity) < 0.001 &&
             Math.Abs(t.Price - price) < 0.001
         );
+    }
+    
+    /// <summary>
+    /// Parses an OCC option symbol to extract option details
+    /// </summary>
+    private static (bool IsOption, string UnderlyingSymbol, DateTime? Expiration, OptionType? Type, double? Strike) ParseOptionSymbol(string symbol)
+    {
+        if (string.IsNullOrEmpty(symbol))
+            return (false, symbol, null, null, null);
+            
+        var match = OptionSymbolRegex.Match(symbol);
+        if (!match.Success)
+            return (false, symbol, null, null, null);
+            
+        var underlying = match.Groups[1].Value;
+        var dateStr = match.Groups[2].Value; // YYMMDD
+        var typeChar = match.Groups[3].Value.ToUpper();
+        var strikeStr = match.Groups[4].Value; // Strike * 1000
+        
+        // Parse expiration date
+        if (!DateTime.TryParseExact(dateStr, "yyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var expiration))
+            return (false, symbol, null, null, null);
+            
+        // Parse option type
+        var optionType = typeChar == "C" ? Models.OptionType.Call : Models.OptionType.Put;
+        
+        // Parse strike (divide by 1000)
+        if (!double.TryParse(strikeStr, out var strikeRaw))
+            return (false, symbol, null, null, null);
+        var strike = strikeRaw / 1000.0;
+        
+        return (true, underlying, expiration, optionType, strike);
+    }
+    
+    /// <summary>
+    /// Determines if the trade is opening or closing based on action text
+    /// </summary>
+    private static (bool IsOpening, string NormalizedType) ParseOptionsAction(string action)
+    {
+        action = action.ToUpper();
+        
+        if (action.Contains("YOU BOUGHT OPENING") || action.Contains("BOUGHT TO OPEN"))
+            return (true, "BUY_TO_OPEN");
+        if (action.Contains("YOU SOLD OPENING") || action.Contains("SOLD TO OPEN"))
+            return (true, "SELL_TO_OPEN");
+        if (action.Contains("YOU BOUGHT CLOSING") || action.Contains("BOUGHT TO CLOSE"))
+            return (false, "BUY_TO_CLOSE");
+        if (action.Contains("YOU SOLD CLOSING") || action.Contains("SOLD TO CLOSE"))
+            return (false, "SELL_TO_CLOSE");
+        if (action.Contains("ASSIGNED") || action.Contains("EXERCISED") || action.Contains("EXPIRED"))
+            return (false, action.Contains("ASSIGNED") ? "ASSIGNED" : action.Contains("EXERCISED") ? "EXERCISED" : "EXPIRED");
+            
+        // Default: treat as opening for buys, closing for sells
+        if (action.Contains("BOUGHT"))
+            return (true, "BUY_TO_OPEN");
+        if (action.Contains("SOLD"))
+            return (true, "SELL_TO_OPEN");
+            
+        return (true, "BUY");
     }
 
     private async Task<bool> IsDuplicateDividendAsync(string userId, string accountId, string symbol, DateTime date, double amount)
@@ -198,9 +265,18 @@ public class FidelityImporter : ITradeImporter
                     continue;
                 }
                 
-                // Only process BUY and SELL actions for trades
+                // Process BUY, SELL, and options-specific actions
+                bool isOptionsAction = action.Contains("OPENING", StringComparison.OrdinalIgnoreCase) ||
+                                       action.Contains("CLOSING", StringComparison.OrdinalIgnoreCase) ||
+                                       action.Contains("TO OPEN", StringComparison.OrdinalIgnoreCase) ||
+                                       action.Contains("TO CLOSE", StringComparison.OrdinalIgnoreCase) ||
+                                       action.Contains("ASSIGNED", StringComparison.OrdinalIgnoreCase) ||
+                                       action.Contains("EXERCISED", StringComparison.OrdinalIgnoreCase) ||
+                                       action.Contains("EXPIRED", StringComparison.OrdinalIgnoreCase);
+                                       
                 if (!action.Contains("BOUGHT", StringComparison.OrdinalIgnoreCase) && 
-                    !action.Contains("SOLD", StringComparison.OrdinalIgnoreCase))
+                    !action.Contains("SOLD", StringComparison.OrdinalIgnoreCase) &&
+                    !isOptionsAction)
                 {
                     result.SkippedCount++;
                     continue;
@@ -233,8 +309,23 @@ public class FidelityImporter : ITradeImporter
                 double.TryParse(commissionStr.Replace("$", "").Replace(",", ""), out var commission);
                 double.TryParse(feesStr.Replace("$", "").Replace(",", ""), out var fees);
 
-                // Determine trade type
-                var tradeType = action.Contains("BOUGHT", StringComparison.OrdinalIgnoreCase) ? "BUY" : "SELL";
+                // Parse option symbol if applicable
+                var (isOption, underlyingSymbol, expiration, optionType, strikePrice) = ParseOptionSymbol(symbol);
+                
+                // Determine trade type and opening/closing
+                string tradeType;
+                bool isOpening = true;
+                
+                if (isOption || isOptionsAction)
+                {
+                    var (opening, normalizedType) = ParseOptionsAction(action);
+                    isOpening = opening;
+                    tradeType = normalizedType;
+                }
+                else
+                {
+                    tradeType = action.Contains("BOUGHT", StringComparison.OrdinalIgnoreCase) ? "BUY" : "SELL";
+                }
                 
                 // Make quantity positive (Fidelity uses negative for sells)
                 quantity = Math.Abs(quantity);
@@ -261,7 +352,15 @@ public class FidelityImporter : ITradeImporter
                     AccountId = accountId,
                     UserId = userId,
                     CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    UpdatedAt = DateTime.UtcNow,
+                    // Options fields
+                    InstrumentType = isOption ? InstrumentType.Option : InstrumentType.Stock,
+                    OptionType = optionType,
+                    StrikePrice = strikePrice,
+                    ExpirationDate = expiration.HasValue ? DateTime.SpecifyKind(expiration.Value, DateTimeKind.Utc) : null,
+                    UnderlyingSymbol = isOption ? underlyingSymbol : null,
+                    ContractMultiplier = isOption ? 100 : 1,
+                    IsOpeningTrade = isOption ? isOpening : null
                 };
 
                 _context.Trades.Add(trade);
@@ -273,7 +372,13 @@ public class FidelityImporter : ITradeImporter
                     Price = price,
                     Fee = commission + fees,
                     Date = date,
-                    Notes = description
+                    Notes = description,
+                    InstrumentType = isOption ? "Option" : "Stock",
+                    OptionType = optionType?.ToString(),
+                    StrikePrice = strikePrice,
+                    ExpirationDate = expiration,
+                    UnderlyingSymbol = isOption ? underlyingSymbol : null,
+                    IsOpeningTrade = isOption ? isOpening : null
                 });
                 result.ImportedCount++;
             }
@@ -289,9 +394,133 @@ public class FidelityImporter : ITradeImporter
         if (result.ImportedCount > 0 || dividendsImported > 0)
         {
             await _context.SaveChangesAsync();
+            
+            // After saving, detect and update spreads for options trades
+            await DetectAndUpdateSpreadsAsync(userId, accountId);
         }
 
         return result;
+    }
+    
+    /// <summary>
+    /// Detects credit/debit spreads by analyzing options trades on the same day with same underlying
+    /// </summary>
+    private async Task DetectAndUpdateSpreadsAsync(string userId, string accountId)
+    {
+        // Get all options trades without a spread group
+        var optionsTrades = await _context.Trades
+            .Where(t => t.UserId == userId && 
+                        t.AccountId == accountId && 
+                        t.InstrumentType == InstrumentType.Option &&
+                        t.SpreadGroupId == null)
+            .OrderBy(t => t.Date)
+            .ToListAsync();
+            
+        if (!optionsTrades.Any())
+            return;
+            
+        // Group by date and underlying symbol
+        var groups = optionsTrades
+            .Where(t => t.UnderlyingSymbol != null && t.ExpirationDate.HasValue)
+            .GroupBy(t => new { Date = t.Date.Date, t.UnderlyingSymbol, t.ExpirationDate })
+            .Where(g => g.Count() >= 2) // Need at least 2 legs for a spread
+            .ToList();
+            
+        foreach (var group in groups)
+        {
+            var trades = group.OrderBy(t => t.StrikePrice).ToList();
+            
+            // Analyze the spread type
+            var spreadType = AnalyzeSpreadType(trades);
+            if (spreadType == SpreadType.Single)
+                continue;
+                
+            // Create a spread group ID
+            var spreadGroupId = Guid.NewGuid().ToString();
+            
+            // Update all trades in the spread
+            int legNumber = 1;
+            foreach (var trade in trades)
+            {
+                trade.SpreadType = spreadType;
+                trade.SpreadGroupId = spreadGroupId;
+                trade.SpreadLegNumber = legNumber++;
+                trade.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        
+        await _context.SaveChangesAsync();
+    }
+    
+    /// <summary>
+    /// Analyzes a group of options trades to determine the spread type
+    /// </summary>
+    private static SpreadType AnalyzeSpreadType(List<Trade> trades)
+    {
+        if (trades.Count < 2)
+            return SpreadType.Single;
+            
+        // Calculate net premium (positive = credit, negative = debit)
+        double netPremium = 0;
+        int buyCount = 0;
+        int sellCount = 0;
+        int callCount = 0;
+        int putCount = 0;
+        
+        foreach (var trade in trades)
+        {
+            var premium = trade.Price * trade.Quantity * trade.ContractMultiplier;
+            
+            if (trade.Type.Contains("BUY", StringComparison.OrdinalIgnoreCase))
+            {
+                netPremium -= premium; // Buying costs money
+                buyCount++;
+            }
+            else if (trade.Type.Contains("SELL", StringComparison.OrdinalIgnoreCase))
+            {
+                netPremium += premium; // Selling receives money
+                sellCount++;
+            }
+            
+            if (trade.OptionType == Models.OptionType.Call)
+                callCount++;
+            else if (trade.OptionType == Models.OptionType.Put)
+                putCount++;
+        }
+        
+        // 4 legs with calls and puts = Iron Condor
+        if (trades.Count == 4 && callCount == 2 && putCount == 2)
+            return SpreadType.IronCondor;
+            
+        // 3 legs with same type = Butterfly
+        if (trades.Count == 3 && (callCount == 3 || putCount == 3))
+            return SpreadType.Butterfly;
+            
+        // Same strike, different type = Straddle
+        if (trades.Count == 2 && callCount == 1 && putCount == 1)
+        {
+            if (trades[0].StrikePrice == trades[1].StrikePrice)
+                return SpreadType.Straddle;
+            else
+                return SpreadType.Strangle;
+        }
+        
+        // 2 legs, same type = Vertical spread
+        if (trades.Count == 2 && (callCount == 2 || putCount == 2))
+        {
+            if (buyCount == 1 && sellCount == 1)
+            {
+                // Credit spread: receive net premium (sell more expensive option)
+                // Debit spread: pay net premium (buy more expensive option)
+                return netPremium > 0 ? SpreadType.CreditSpread : SpreadType.DebitSpread;
+            }
+        }
+        
+        // More than 2 legs, mixed = Custom
+        if (trades.Count > 2)
+            return SpreadType.Custom;
+            
+        return SpreadType.Single;
     }
 
     private static string[] ParseCsvLine(string line)

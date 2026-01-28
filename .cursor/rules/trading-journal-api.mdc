@@ -1,0 +1,137 @@
+---
+description: TradingJournal API development - C# ASP.NET Core Web API with Entity Framework Core
+globs: ["TradingJournal.Api/**/*.cs", "TradingJournal.Api/**/*.json"]
+---
+
+# TradingJournal API Development Guide
+
+You are working on the TradingJournal API, a .NET 10.0 ASP.NET Core Web API backend.
+
+## Tech Stack
+
+- **Framework:** ASP.NET Core 10.0 Web API
+- **Language:** C# 12
+- **ORM:** Entity Framework Core 10.0
+- **Database:** PostgreSQL 15+
+- **Authentication:** JWT Bearer tokens
+- **Password Hashing:** BCrypt.Net-Next
+- **API Documentation:** Swagger/OpenAPI (Swashbuckle)
+- **External APIs:** YahooFinanceApi for stock quotes
+
+## Project Structure
+
+```
+TradingJournal.Api/
+├── Controllers/         # REST API endpoints with [Authorize] attribute
+├── Models/              # Domain entities (Trade, Account, Dividend, Portfolio, User)
+├── Services/            # Business logic with interface-based DI
+│   └── Import/          # CSV importers (Fidelity, Generic)
+├── Data/                # ApplicationDbContext (EF Core)
+├── Migrations/          # EF Core migrations
+├── Program.cs           # Application entry point
+└── appsettings.json     # Configuration
+```
+
+## Domain Models
+
+### Trade (with Options Support)
+- Symbol, Type (BUY/SELL/BUY_TO_OPEN/SELL_TO_CLOSE)
+- Quantity, Price, Fee, Currency, Date
+- **Options fields:** InstrumentType, OptionType, StrikePrice, ExpirationDate, UnderlyingSymbol
+- **Spreads:** SpreadType, SpreadGroupId, SpreadLegNumber
+
+### Account
+- Name, Currency, UserId
+
+### Dividend
+- Symbol, Amount, Type (CASH/QUALIFIED/REINVESTED), PaymentDate
+
+### Portfolio
+- Symbol, Quantity, AveragePrice (calculated from FIFO)
+
+## Coding Conventions
+
+### Controllers
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+[Authorize]
+public class TradesController : ControllerBase
+{
+    private readonly ITradeService _tradeService;
+    
+    // Get user ID from JWT claims
+    private string GetUserId() => User.FindFirst(ClaimTypes.NameIdentifier)?.Value!;
+}
+```
+
+### Services
+```csharp
+public interface ITradeService
+{
+    Task<Trade> CreateTradeAsync(CreateTradeRequest request, string userId);
+}
+
+public class TradeService : ITradeService
+{
+    private readonly ApplicationDbContext _context;
+    // Constructor injection
+}
+```
+
+### Models (EF Core)
+```csharp
+[Table("trades")]
+public class Trade
+{
+    [Key]
+    [Column("id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    
+    [Required]
+    [Column("symbol")]
+    public string Symbol { get; set; } = string.Empty;
+}
+```
+
+## Database Conventions
+
+- Table names: snake_case (e.g., `trades`, `dividends`)
+- Column names: camelCase in C#, snake_case in database
+- Primary keys: string (GUID) with `[Key]` attribute
+- Foreign keys: Cascade delete configured in `OnModelCreating`
+
+## Commands
+
+```bash
+# Run API
+cd TradingJournal.Api
+dotnet run
+
+# Add migration
+dotnet ef migrations add MigrationName
+
+# Apply migration
+dotnet ef database update
+
+# Direct SQL (if needed)
+docker exec trading-journal-db psql -U tradingjournal -d tradingjournal -c "SQL"
+```
+
+## Important Patterns
+
+1. **User Isolation:** All queries MUST filter by `userId` from claims
+2. **Async/Await:** Use throughout for I/O operations
+3. **LINQ with EF Core:** Use `Include()` for eager loading
+4. **Error Handling:** Return appropriate HTTP status codes (200, 201, 400, 401, 404, 500)
+5. **Validation:** Use data annotations or FluentValidation
+
+## API Endpoints Pattern
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | /api/trades | List user's trades |
+| POST | /api/trades | Create trade |
+| GET | /api/trades/{id} | Get single trade |
+| PUT | /api/trades/{id} | Update trade |
+| DELETE | /api/trades/{id} | Delete trade |
